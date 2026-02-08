@@ -15,13 +15,14 @@
 #include <unordered_set>
 #include <memory>
 #include <typeinfo>
+#include <algorithm>
 
 #define PARAMETER_SCALE 1000000
+#define RELOAD_TIME 2
 
 class SimulinkModelClass{
 
     using string = std::string;
-
     bool modelActive;
     string fullNodeName;
 
@@ -34,11 +35,15 @@ class SimulinkModelClass{
 
 
     //list and set param client
-    std::unique_ptr<MonitoredServiceClient<ListParams>> listParamClient;
-    std::unique_ptr<MonitoredServiceClient<SetParams>> setParamClient;
+    std::shared_ptr<MonitoredServiceClient<ListParams>> listParamClient;
+    std::shared_ptr<MonitoredServiceClient<SetParams>> setParamClient;
+
+    std::vector<std::pair<std::string,int64_t>> intV;
+    std::vector<std::pair<std::string,bool>> boolV;
+    std::vector<std::pair<std::string,std::vector<int64_t>>> arrayV;
 
     //overseer node and node name
-    rclcpp::Node::SharedPtr overseer;
+    std::shared_ptr<ControllerOverseer> overseer;
     string nodeName;
 
     //set of known parameters
@@ -56,6 +61,7 @@ class SimulinkModelClass{
     //constructor
     SimulinkModelClass(rclcpp::Node::SharedPtr overseerNode, string nodeName) : overseer(overseerNode), nodeName(nodeName), modelActive(false), paramsLoaded(false){
         lastReloadTime = overseer->get_clock()->now();
+        reloadParams = make_shared<node->create_service<std_srvs::stv::Trigger>("controller_overseer/update_" + nodeName + "_params", std::bind(&SimulinkModelClass::reloadParamatersCallback, this, _1))
     }
 
     /*
@@ -83,8 +89,8 @@ class SimulinkModelClass{
                 modelActive = true;
                 RCLCPP_INFO(node->get_logger(), "Found %s as %s!", nodeName, fullNodeName);
 
-                listParamClient = std::make_unique<MonitoredServiceClient<ListParams>>(overseer, fullNodeName + "/list_parameters");
-                setParamClient = std::make_unique<MonitoredServiceClient<setParams>>(overseer, fullNodeName + "/ser_parameters");
+                listParamClient = std::make_shared<MonitoredServiceClient<ListParams>>(overseer, fullNodeName + "/list_parameters");
+                setParamClient = std::make_shared<MonitoredServiceClient<setParams>>(overseer, fullNodeName + "/ser_parameters");
 
                 reloadParamaters();
             }else if(listParamClient->waitingRequests.size() == 0 && setParamClient->waitingRequests.size() == 0){
@@ -112,8 +118,8 @@ class SimulinkModelClass{
     void setModelParametersFromListCallback(ListParams::Response::SharedPtr response){
         std::vector<string> unknownParams;
         for(string paramName : response->result.names){
-            if(!knownParams.conatins(paramName)){
-                unknownParams.push_back(paramName);
+            if(!knownParams.contains(paramName)){
+                unknownParams.insert(paramName);
             }
         }
         if(unknownParams.size() > 0){
@@ -135,7 +141,7 @@ class SimulinkModelClass{
 
 
                 bool found = false;
-                for (const std::pair<std::string, int64_t> p : intV) {
+                for (const std::pair<std::string, int64_t>& p : intV) {
                     if (p.first == paramName) {
                         found = true;
                         // use p.second (the int64 value)
@@ -146,7 +152,7 @@ class SimulinkModelClass{
                 }
 
                 if(!found){
-                    for (const std::pair<std::string, bool> p : boolV) {
+                    for (const std::pair<std::string, bool>& p : boolV) {
                         if (p.first == paramName) {
                             found = true;
                             // use p.second (the bool value)
@@ -158,7 +164,7 @@ class SimulinkModelClass{
                 }
 
                 if(!found){
-                    for (const std::pair<std::string, std::vector<int64_t>> p : arrayV) {
+                    for (const std::pair<std::string, std::vector<int64_t>>& p : arrayV) {
                         if (p.first == paramName) {
                             found = true;
                             // use p.second (the vector of ints value)
@@ -175,7 +181,7 @@ class SimulinkModelClass{
                     paramVector.push_back(readParam);
                 }else{
                     RCLCPP_WARN(overseer->get_logger(), "Not setting %s, parameter not found!", paramName);
-                    knownParams.push_back(paramName);
+                    knownParams.insert(paramName);
                 }
             }
 
@@ -189,8 +195,64 @@ class SimulinkModelClass{
     }
 
     void setParametersDoneCallback(SetParams::Response::SharedPtr res, SetParams::Request::SharedPtr req){
-        
+        bool success = true;
+        for(int i = 0; i > sizeof(res->results); i++){
+            if(res->results[i].successful && !knownParams.contains(req->parameters[i].name)){
+                knownParams.insert(req->parameters[i].name);
+            }else if(!res->results[i].successful){
+                success = false;
+                RCLCPP_WARN(overseer->get_logger(), "Failed to set parameter: %s for %s: %s", req->parameters[i].name, nodeName, res->results[i].reason);
+            }
+        }
+
+        if(success){
+            RCLCPP_INFO(overseer->get_logger(), "Successfully set parameters for %s", nodeName);
+        }
+
+        paramsLoaded = true;
+
     }
+
+    bool reloadParams(){
+        knownParams.clear();
+        overseer->readConfig();
+
+        return listAndSetModelParameters();
+    }
+
+    rclcpp::srv::Trigger::Response reloadParamatersCallback(rclcpp::srv:Trigger:Response res){
+        rclcpp::Time current = overseer->get_clock().now();
+        if(!modelActive){
+            res.success = false
+            res.message = nodeName + " is not active!";
+            return res;
+        }
+
+        if((current - lastReloadTime).nanoseconds() * 1e-9 < RELOAD_TIME){
+            res.success = false
+            res.message = nodeName + " has been reloaded within the last 2 seconds";
+            return res;
+        }
+        
+        bool success = reloadParams();
+        res.success = success;
+
+        if(success){
+            res.message = nodeName + " parameter reload was successful";
+            lastReloadTime = current;
+        }else{
+            res.message = nodeName + " parameter reload failed";
+        }
+
+        return res;
+
+
+    }
+
+
+
+
+
 
 
 
