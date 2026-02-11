@@ -8,6 +8,8 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rcl_interfaces REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(riptide_msgs2 REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -18,19 +20,27 @@ find_package(control_toolbox REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 #thruster test script
 add_executable(thruster_test_canbus models/complete_system/send_thruster_cmd_canbus.c)
 target_compile_definitions(thruster_test_canbus PUBLIC ENABLE_THRUSTER_TEST) #enable the thruster test code in send_thruster_cmd_canbus.c
 
+add_executable(controller_overseer src/controller_overseer.cpp src/simulink_model.cpp src/monitored_service_client.cpp)
 
-add_library(monitored_service_client OBJECT
-  C++/monitored_service_client.cpp
+
+target_include_directories(controller_overseer PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+    ${YAML_CPP_INCLUDEDIR})
+
+ament_target_dependencies(controller_overseer
+rclcpp
+rcl_interfaces
+std_srvs
 )
 
-ament_target_dependencies(monitored_service_client
-  rclcpp
-)
+
 
 
 install(TARGETS thruster_test_canbus

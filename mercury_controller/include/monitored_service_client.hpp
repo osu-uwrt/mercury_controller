@@ -14,7 +14,7 @@ template<typename ServiceT>
 class MonitoredServiceClient{
 
     //node that is using this and the Client that will be used to call the service when needed
-    rclcpp::Node::SharedPtr node;
+    std::shared_ptr<ControllerOverseer> node;
     typename rclcpp::Client<ServiceT>::SharedPtr client;
 
     //timer and log of when a service timer started
@@ -43,6 +43,7 @@ class MonitoredServiceClient{
     //future that stores the upcoming response from an active service
     Future activeFuture;
 
+    public:
 
     /*
         Responsible for adding a service to the queue.
@@ -63,5 +64,5 @@ class MonitoredServiceClient{
     void serviceCallback(Future future);
 
     //constructor go brrrr
-    MonitoredServiceClient(rclcpp::Node::SharedPtr node, std::string serviceName);
+    MonitoredServiceClient(std::shared_ptr<ControllerOverseer> node, std::string serviceName);
 };

@@ -21,6 +21,7 @@
   <build_depend>sensor_msgs</build_depend>
   <build_depend>tf2_geometry_msgs</build_depend>
   <build_depend>tf_transformations</build_depend>
+  <build_depend>yaml-cpp</build_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>riptide_msgs2</exec_depend>
