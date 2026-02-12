@@ -35,31 +35,23 @@ target_include_directories(controller_overseer PUBLIC
     ${YAML_CPP_INCLUDEDIR})
 
 ament_target_dependencies(controller_overseer
-rclcpp
-rcl_interfaces
-std_srvs
+  rclcpp
+  rcl_interfaces
+  std_srvs
 )
-
-
 
 
 install(TARGETS thruster_test_canbus
   DESTINATION lib/${PROJECT_NAME})
 
-
-# yoink python programs from src directory
-file(GLOB src_py_files RELATIVE ${PROJECT_SOURCE_DIR} src/mercury_controller/*.py)
+# yoink python programs from python source
+file(GLOB src_py_files RELATIVE ${PROJECT_SOURCE_DIR} mercury_controller/*.py)
 install(PROGRAMS ${src_py_files}
   DESTINATION lib/${PROJECT_NAME})
 
 # yoink python programs from models directory
 file(GLOB model_py_files RELATIVE ${PROJECT_SOURCE_DIR} models/*.py)
 install(PROGRAMS ${model_py_files}
-  DESTINATION lib/${PROJECT_NAME})
-
-# yoink python programs from test directory
-file(GLOB test_py_files RELATIVE ${PROJECT_SOURCE_DIR} test/mercury_controller/*.py)
-install(PROGRAMS ${test_py_files}
   DESTINATION lib/${PROJECT_NAME})
 
 #Install launch files

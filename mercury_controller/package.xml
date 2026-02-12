@@ -2,35 +2,16 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>mercury_controller</name>
-  <version>0.0.1</version>
-  <description>Package to store all code relating to the control of OSU's AUV.</description>
+  <version>0.0.0</version>
+  <description>ROS2 control system for the Mercury stack </description>
+  <maintainer email="darnley.6@osu.edu">John Darnley</maintainer>
+  <license>Apache 2.0</license>
 
-  <maintainer email="osu.uwrt@gmail.com">OSU UWRT</maintainer>
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <license>BSD</license>
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
 
-  <url type="repository">https://github.com/osu-uwrt/riptide_controllers</url>
-  <url type="website">http://wiki.ros.org/riptide_controllers</url>
-
-  <author>Blaine Miller</author>
-  <author>Mitchell Sayre</author>
-
-  <build_depend>geometry_msgs</build_depend>
-  <build_depend>riptide_msgs2</build_depend>
-  <build_depend>rclcpp</build_depend>
-  <build_depend>sensor_msgs</build_depend>
-  <build_depend>tf2_geometry_msgs</build_depend>
-  <build_depend>tf_transformations</build_depend>
-  <build_depend>yaml-cpp</build_depend>
-  <exec_depend>rclpy</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>riptide_msgs2</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>control_toolbox</exec_depend>
-  <exec_depend>tf2</exec_depend>
-  <exec_depend>tf2_ros</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
-  
   <export>
     <build_type>ament_cmake</build_type>
   </export>
