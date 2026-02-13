@@ -16,7 +16,6 @@
 #include <std_srvs/srv/trigger.hpp>
 
 #include <vector>
-#include <yaml-cpp/yaml.h>
 #include <string>
 #include <unordered_set>
 #include <memory>

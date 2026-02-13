@@ -30,7 +30,7 @@ add_executable(controller_overseer src/controller_overseer.cpp src/simulink_mode
 
 
 target_include_directories(controller_overseer PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mercury_controller>
     $<INSTALL_INTERFACE:include>
     ${YAML_CPP_INCLUDEDIR})
 

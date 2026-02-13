@@ -22,14 +22,14 @@
 
         if(amountOfNodes > 1){
             //should not happen
-            RCLCPP_WARN(node->get_logger(), "Detected %d nodes with %s", amountOfNodes, nodeName);
+            RCLCPP_WARN(node->get_logger(), "Detected %d nodes with %s", amountOfNodes.c_str(), nodeName.c_str());
 
         }
         if(amountOfNodes == 1){
             fullNodeName = activeModelNodes[0];
             if(!modelActive){
                 modelActive = true;
-                RCLCPP_INFO(node->get_logger(), "Found %s as %s!", nodeName, fullNodeName);
+                RCLCPP_INFO(node->get_logger(), "Found %s as %s!", nodeName.c_str(), fullNodeName.c_str());
 
                 listParamClient = std::make_shared<MonitoredServiceClient<ListParams>>(overseer, fullNodeName + "/list_parameters");
                 setParamClient = std::make_shared<MonitoredServiceClient<setParams>>(overseer, fullNodeName + "/set_parameters");
@@ -42,7 +42,7 @@
         }
         else if(modelActive){
             modelActive = false;
-            RCLCPP_WARN(overseer->get_logger(), "Lost %s", nodeName);
+            RCLCPP_WARN(overseer->get_logger(), "Lost %s", nodeName.c_str());
         }
     }
 
@@ -53,7 +53,7 @@
             return listParamClient->scheduleCall(req, [this](ListParams::Response::SharedPtr res){setModelParametersFromListCallback(res);});
         }
 
-        RCLCPP_WARN(overseer->get_logger(), "Cannot list parameters for %s because model is not active or listParamClient is not null", nodeName);
+        RCLCPP_WARN(overseer->get_logger(), "Cannot list parameters for %s because model is not active or listParamClient is not null", nodeName.c_str());
         return false;
     }
 
@@ -118,7 +118,7 @@
                     readParam.name = paramName;
                     paramVector.push_back(readParam);
                 }else{
-                    RCLCPP_WARN(overseer->get_logger(), "Not setting %s, parameter not found!", paramName);
+                    RCLCPP_WARN(overseer->get_logger(), "Not setting %s, parameter not found!", paramName.c_str());
                     knownParams.insert(paramName);
                 }
             }
@@ -128,7 +128,7 @@
             
 
         }else{
-            RCLCPP_WARN(overseer->get_logger(), "Cannot list parameters for %s because model is not active.", nodeName);
+            RCLCPP_WARN(overseer->get_logger(), "Cannot list parameters for %s because model is not active.", nodeName.c_str());
         }
     }
 
@@ -139,12 +139,12 @@
                 knownParams.insert(req->parameters[i].name);
             }else if(!res->results[i].successful){
                 success = false;
-                RCLCPP_WARN(overseer->get_logger(), "Failed to set parameter: %s for %s: %s", req->parameters[i].name, nodeName, res->results[i].reason);
+                RCLCPP_WARN(overseer->get_logger(), "Failed to set parameter: %s for %s: %s", req->parameters[i].name.c_str(), nodeName.c_str(), res->results[i].reason.c_str());
             }
         }
 
         if(success){
-            RCLCPP_INFO(overseer->get_logger(), "Successfully set parameters for %s", nodeName);
+            RCLCPP_INFO(overseer->get_logger(), "Successfully set parameters for %s", nodeName.c_str());
         }
 
         paramsLoaded = true;
@@ -159,7 +159,7 @@
     }
 
     std_srvs::srv::Trigger::Response SimulinkModelClass::reloadParametersCallback(std_srvs::srv::Trigger::Response res){
-        rclcpp::Time current = overseer->get_clock().now();
+        rclcpp::Time current = overseer->get_clock()->now();
         if(!modelActive){
             res.success = false;
             res.message = nodeName + " is not active!";

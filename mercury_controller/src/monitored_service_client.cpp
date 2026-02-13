@@ -55,7 +55,7 @@ void MonitoredServiceClient<T>::serviceCallback(typename rclcpp::Client<T>::Shar
 }
 
 template<typename T>
-MonitoredServiceClient<T>::MonitoredServiceClient(rclcpp::Node::SharedPtr node, std::string serviceName) : node(node), waitingForClient(false){
+MonitoredServiceClient<T>::MonitoredServiceClient(std::shared_ptr<ControllerOverseer> node, std::string serviceName) : node(node), waitingForClient(false){
         client = node->create_client<T>(serviceName);
         timer = node->create_wall_timer(std::chrono::milliseconds(500), std::bind(&MonitoredServiceClient<T>::timerCallback, this));
 

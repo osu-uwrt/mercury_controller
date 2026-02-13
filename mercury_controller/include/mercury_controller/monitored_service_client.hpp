@@ -1,6 +1,7 @@
 #pragma once
 
 #include <rclcpp/rclcpp.hpp>
+#include "controller_overseer.hpp"
 
 #include <deque>
 #include <functional>
@@ -11,7 +12,7 @@
 
 
 template<typename ServiceT>
-class MonitoredServiceClient{
+class MonitoredServiceClient<ServiceT>{
 
     //node that is using this and the Client that will be used to call the service when needed
     std::shared_ptr<ControllerOverseer> node;
