@@ -21,21 +21,23 @@
 
 class ControllerOverseer;
 
+using string = std::string;
+
+using ListParams = rcl_interfaces::srv::ListParameters;
+using SetParams = rcl_interfaces::srv::SetParameters;
+using SetParamsResult = rcl_interfaces::msg::SetParametersResult;
+using Parameter = rcl_interfaces::msg::Parameter;
+using ParameterType = rclcpp::ParameterType;
+using ParameterValue = rcl_interfaces::msg::ParameterValue;
+
 #define PARAMETER_SCALE 1000000
 #define RELOAD_TIME 2
 
 class SimulinkModelClass{
 
-    using string = std::string;
+
     bool modelActive;
     string fullNodeName;
-
-    using ListParams = rcl_interfaces::srv::ListParameters;
-    using SetParams = rcl_interfaces::srv::SetParameters;
-    using SetParamsResult = rcl_interfaces::msg::SetParametersResult;
-    using Parameter = rcl_interfaces::msg::Parameter;
-    using ParameterType = rclcpp::ParameterType;
-    using ParameterValue = rcl_interfaces::msg::ParameterValue;
 
 
     //list and set param client
@@ -68,7 +70,7 @@ class SimulinkModelClass{
     /*
         Checks if model is active, handles when model comes up or down.
     */
-    void checkIfActive(std::vector<string>> activeNodes);
+    void checkIfActive(const std::vector<string>& activeNodes);
 
     bool listAndSetModelParameters();
 
@@ -84,7 +86,8 @@ class SimulinkModelClass{
     bool reloadParams();
 
 
-    std_srvs::srv::Trigger::Response reloadParametersCallback(std_srvs::srv::Trigger::Response res);
+    void reloadParametersCallback(const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+                                                                std::shared_ptr<std_srvs::srv::Trigger::Response> res);
 
 
 

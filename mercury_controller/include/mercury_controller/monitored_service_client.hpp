@@ -107,6 +107,11 @@ class MonitoredServiceClient{
         } 
     }
 
+    //true if client has not waiting requests or active request
+    bool isIdle(){
+        return !waitingForClient && waitingRequests.empty();
+    }
+
     //constructor go brrrr
     MonitoredServiceClient(rclcpp::Node::SharedPtr node, std::string serviceName) : node(node), waitingForClient(false){
         client = node->create_client<ServiceT>(serviceName);

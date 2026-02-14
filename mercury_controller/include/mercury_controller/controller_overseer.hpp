@@ -7,13 +7,14 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <filesystem>
 
 #include "simulink_model.hpp"
 
 
 class ControllerOverseer : public rclcpp::Node {
 
-    using string = std::string
+    using string = std::string;
 
     bool waitingOnInit;
 
@@ -21,11 +22,9 @@ class ControllerOverseer : public rclcpp::Node {
 
     YAML::Node configTree;
 
-    using fs = std::filesystem;
-
     string autoffConfigPath;
 
-    SimulinkModelClass completeController;
+    std::shared_ptr<SimulinkModelClass> completeController;
 
 
 

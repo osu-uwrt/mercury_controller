@@ -3,21 +3,22 @@
 
 #include <algorithm>
 
+
     //constructor
     SimulinkModelClass::SimulinkModelClass(std::shared_ptr<ControllerOverseer> overseerNode, string nodeName) : overseer(overseerNode), nodeName(nodeName), modelActive(false), paramsLoaded(false){
         lastReloadTime = overseer->get_clock()->now();
-        reloadParamService = make_shared<overseerNode->create_service<std_srvs::stv::Trigger>("controller_overseer/update_" + nodeName + "_params", std::bind(&SimulinkModelClass::reloadParametersCallback, this, _1))
+        reloadParamService = overseerNode->create_service<std_srvs::srv::Trigger>("controller_overseer/update_" + nodeName + "_params", std::bind(&SimulinkModelClass::reloadParametersCallback, this,  std::placeholders::_1, std::placeholders::_2));
     }
 
     /*
         Checks if model is active, handles when model comes up or down.
     */
-    void SimulinkModelClass::checkIfActive(std::vector<string>> activeNodes){
+    void SimulinkModelClass::checkIfActive(const std::vector<string>& activeNodes){
         
         //grab nodes that 
         std::vector<string> activeModelNodes;
         for(string node : activeNodes){
-            if(node.contains(nodeName)){
+            if(node.find(nodeName) != std::string::npos){
                 activeModelNodes.push_back(node);
             }
         }
@@ -25,7 +26,7 @@
 
         if(amountOfNodes > 1){
             //should not happen
-            RCLCPP_WARN(overseer->get_logger(), "Detected %d nodes with %s", amountOfNodes.c_str(), nodeName.c_str());
+            RCLCPP_WARN(overseer->get_logger(), "Detected %d nodes with %s", amountOfNodes, nodeName.c_str());
 
         }
         if(amountOfNodes == 1){
@@ -35,10 +36,10 @@
                 RCLCPP_INFO(overseer->get_logger(), "Found %s as %s!", nodeName.c_str(), fullNodeName.c_str());
 
                 listParamClient = std::make_shared<MonitoredServiceClient<ListParams>>(overseer, fullNodeName + "/list_parameters");
-                setParamClient = std::make_shared<MonitoredServiceClient<setParams>>(overseer, fullNodeName + "/set_parameters");
+                setParamClient = std::make_shared<MonitoredServiceClient<SetParams>>(overseer, fullNodeName + "/set_parameters");
 
-                reloadParamaters();
-            }else if(listParamClient->waitingRequests.size() == 0 && setParamClient->waitingRequests.size() == 0){
+                reloadParams();
+            }else if(listParamClient->isIdle() && setParamClient->isIdle()){
                 listAndSetModelParameters();
             }
 
@@ -63,8 +64,8 @@
     void SimulinkModelClass::setModelParametersFromListCallback(ListParams::Response::SharedPtr response){
         std::vector<string> unknownParams;
         for(string paramName : response->result.names){
-            if(!knownParams.contains(paramName)){
-                unknownParams.insert(paramName);
+            if(knownParams.find(paramName) == knownParams.end()){
+                unknownParams.push_back(paramName);
             }
         }
         if(unknownParams.size() > 0){
@@ -137,8 +138,8 @@
 
     void SimulinkModelClass::setParametersDoneCallback(SetParams::Response::SharedPtr res, SetParams::Request::SharedPtr req){
         bool success = true;
-        for(int i = 0; i > sizeof(res->results); i++){
-            if(res->results[i].successful && !knownParams.contains(req->parameters[i].name)){
+        for(int i = 0; i < res->results.size(); i++){
+            if(res->results[i].successful && knownParams.find(req->parameters[i].name) == knownParams.end()){
                 knownParams.insert(req->parameters[i].name);
             }else if(!res->results[i].successful){
                 success = false;
@@ -161,30 +162,29 @@
         return listAndSetModelParameters();
     }
 
-    std_srvs::srv::Trigger::Response SimulinkModelClass::reloadParametersCallback(std_srvs::srv::Trigger::Response res){
+    void SimulinkModelClass::reloadParametersCallback(const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+                                                                                    std::shared_ptr<std_srvs::srv::Trigger::Response> res){
         rclcpp::Time current = overseer->get_clock()->now();
         if(!modelActive){
-            res.success = false;
-            res.message = nodeName + " is not active!";
-            return res;
+            res->success = false;
+            res->message = nodeName + " is not active!";
+            return;
         }
 
         if((current - lastReloadTime).nanoseconds() * 1e-9 < RELOAD_TIME){
-            res.success = false;
-            res.message = nodeName + " has been reloaded within the last 2 seconds";
-            return res;
+            res->success = false;
+            res->message = nodeName + " has been reloaded within the last 2 seconds";
+            return;
         }
         
-        res.success = reloadParams();
+        res->success = reloadParams();
 
-        if(res.success){
-            res.message = nodeName + " parameter reload was successful";
+        if(res->success){
+            res->message = nodeName + " parameter reload was successful";
             lastReloadTime = current;
         }else{
-            res.message = nodeName + " parameter reload failed";
+            res->message = nodeName + " parameter reload failed";
         }
-
-        return res;
 
 
     }
