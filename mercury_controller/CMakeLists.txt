@@ -26,7 +26,7 @@ find_package(yaml-cpp REQUIRED)
 add_executable(thruster_test_canbus models/complete_system/send_thruster_cmd_canbus.c)
 target_compile_definitions(thruster_test_canbus PUBLIC ENABLE_THRUSTER_TEST) #enable the thruster test code in send_thruster_cmd_canbus.c
 
-add_executable(controller_overseer src/controller_overseer.cpp src/simulink_model.cpp src/monitored_service_client.cpp)
+add_executable(controller_overseer src/controller_overseer.cpp src/simulink_model.cpp)
 
 
 target_include_directories(controller_overseer PUBLIC

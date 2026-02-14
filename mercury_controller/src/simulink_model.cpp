@@ -1,9 +1,12 @@
 #include "simulink_model.hpp"
+#include "controller_overseer.hpp"
+
+#include <algorithm>
 
     //constructor
     SimulinkModelClass::SimulinkModelClass(std::shared_ptr<ControllerOverseer> overseerNode, string nodeName) : overseer(overseerNode), nodeName(nodeName), modelActive(false), paramsLoaded(false){
         lastReloadTime = overseer->get_clock()->now();
-        reloadParams = make_shared<node->create_service<std_srvs::stv::Trigger>("controller_overseer/update_" + nodeName + "_params", std::bind(&SimulinkModelClass::reloadParamatersCallback, this, _1))
+        reloadParamService = make_shared<overseerNode->create_service<std_srvs::stv::Trigger>("controller_overseer/update_" + nodeName + "_params", std::bind(&SimulinkModelClass::reloadParametersCallback, this, _1))
     }
 
     /*
@@ -22,14 +25,14 @@
 
         if(amountOfNodes > 1){
             //should not happen
-            RCLCPP_WARN(node->get_logger(), "Detected %d nodes with %s", amountOfNodes.c_str(), nodeName.c_str());
+            RCLCPP_WARN(overseer->get_logger(), "Detected %d nodes with %s", amountOfNodes.c_str(), nodeName.c_str());
 
         }
         if(amountOfNodes == 1){
             fullNodeName = activeModelNodes[0];
             if(!modelActive){
                 modelActive = true;
-                RCLCPP_INFO(node->get_logger(), "Found %s as %s!", nodeName.c_str(), fullNodeName.c_str());
+                RCLCPP_INFO(overseer->get_logger(), "Found %s as %s!", nodeName.c_str(), fullNodeName.c_str());
 
                 listParamClient = std::make_shared<MonitoredServiceClient<ListParams>>(overseer, fullNodeName + "/list_parameters");
                 setParamClient = std::make_shared<MonitoredServiceClient<setParams>>(overseer, fullNodeName + "/set_parameters");
@@ -65,7 +68,7 @@
             }
         }
         if(unknownParams.size() > 0){
-            setModelParameters(unknownParams)
+            setModelParameters(unknownParams);
         };
     }
 
@@ -77,8 +80,8 @@
             std::vector<Parameter> paramVector;
 
             for(string paramName : paramsToSet){
-                Parameter readParam = Parameter;
-                ParameterValue val = ParameterValue;
+                Parameter readParam;
+                ParameterValue val;
 
 
                 bool found = false;

@@ -8,17 +8,18 @@
 #include <rcl_interfaces/msg/parameter_value.hpp>
 #include <rcl_interfaces/msg/parameter_type.hpp>
 
-
-#include <rclcpp/parameter.hpp>
-#include <rclcpp/parameter_value.hpp>
-#include "monitored_service_client.hpp"
-#include "controller_overseer.hpp"
 #include <std_srvs/srv/trigger.hpp>
 
-#include <vector>
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_set>
-#include <memory>
+#include <utility>
+#include <vector>
+
+#include "monitored_service_client.hpp"
+
+class ControllerOverseer;
 
 #define PARAMETER_SCALE 1000000
 #define RELOAD_TIME 2
@@ -84,22 +85,6 @@ class SimulinkModelClass{
 
 
     std_srvs::srv::Trigger::Response reloadParametersCallback(std_srvs::srv::Trigger::Response res);
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-    
-
 
 
 
