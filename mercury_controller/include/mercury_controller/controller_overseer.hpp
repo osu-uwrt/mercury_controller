@@ -32,6 +32,9 @@ class ControllerOverseer : public rclcpp::Node {
         
     }
 
+    readConfig();
+
+    
 
 
 };

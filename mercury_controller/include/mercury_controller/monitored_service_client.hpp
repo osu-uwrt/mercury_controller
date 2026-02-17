@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 #include <utility>
-
+#include <optional>
 
 
 template<typename ServiceT>
@@ -42,7 +42,7 @@ class MonitoredServiceClient{
     servicePair activeClient; //only allowed to be used when waitingForClient is true
 
     //future that stores the upcoming response from an active service
-    FutureAndId activeFuture;
+    std::optional<FutureAndId> activeFuture;
 
     public:
 
@@ -71,7 +71,7 @@ class MonitoredServiceClient{
         if(waitingForClient){
             if((node->get_clock()->now() - startTime).seconds() >= 3){
                 RCLCPP_ERROR(node->get_logger(), "Call to service %s timed out", client->get_service_name());
-                client->remove_pending_request(activeFuture);
+                client->remove_pending_request(*activeFuture);
                 waitingForClient = false;
             }
         } else{

@@ -10,12 +10,13 @@
 
 #include <std_srvs/srv/trigger.hpp>
 
-#include <cstdint>
+
 #include <memory>
 #include <string>
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
 
 #include "monitored_service_client.hpp"
 
@@ -72,20 +73,37 @@ class SimulinkModelClass{
     */
     void checkIfActive(const std::vector<string>& activeNodes);
 
+    /*
+        returns true is the parameters are successfully set and listed 
+     */
     bool listAndSetModelParameters();
 
+
+    /*
+        Callback that does the setting of the parameters for the listAndSetModelParameters function
+    */
     void setModelParametersFromListCallback(ListParams::Response::SharedPtr response);
 
 
+    /*
+        Sets the models parameters from a vector of strings
+    */
     void setModelParameters(std::vector<string> paramsToSet);
 
-
+    /*
+        Callback for when the set parameters client is called
+    */
     void setParametersDoneCallback(SetParams::Response::SharedPtr res, SetParams::Request::SharedPtr req);
 
 
+    /*
+        reloads the parameters from the .yaml file
+    */
     bool reloadParams();
 
-
+    /*
+        Callback that makes the response for the triggered client for reloading the parameters
+    */
     void reloadParametersCallback(const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
                                                                 std::shared_ptr<std_srvs::srv::Trigger::Response> res);
 
