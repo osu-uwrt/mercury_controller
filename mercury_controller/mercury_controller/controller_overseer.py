@@ -883,7 +883,7 @@ class ControllerOverseer(Node):
         #if the controller is trying to reinit the autoff
         if(self.waiting_on_init):
 
-            auto_ff_init = None
+            "auto_ff_init" = None
             try:
                 auto_ff_init = self.configTree["controller"]["autoff"]["initial_ff"]
             except KeyError:

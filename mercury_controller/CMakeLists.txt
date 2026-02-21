@@ -38,6 +38,7 @@ ament_target_dependencies(controller_overseer
   rclcpp
   rcl_interfaces
   std_srvs
+  riptide_msgs2
 )
 
 

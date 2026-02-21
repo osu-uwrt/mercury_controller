@@ -39,8 +39,8 @@
                 modelActive = true;
                 RCLCPP_INFO(overseer->get_logger(), "Found %s as %s!", nodeName.c_str(), fullNodeName.c_str());
 
-                listParamClient = std::make_shared<MonitoredServiceClient<ListParams>>(overseer, fullNodeName + "/list_parameters");
-                setParamClient = std::make_shared<MonitoredServiceClient<SetParams>>(overseer, fullNodeName + "/set_parameters");
+                listParamClient = std::make_shared<MonitoredServiceClient<ListParams>>(overseer.get(), fullNodeName + "/list_parameters");
+                setParamClient = std::make_shared<MonitoredServiceClient<SetParams>>(overseer.get(), fullNodeName + "/set_parameters");
 
                 reloadParams();
 

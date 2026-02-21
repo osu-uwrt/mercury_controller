@@ -15,7 +15,8 @@ template<typename ServiceT>
 class MonitoredServiceClient{
 
     //node that is using this and the Client that will be used to call the service when needed
-    rclcpp::Node::SharedPtr node;
+    //this is a raw pointer bc only the Node functions are needed so no need to include the full ControllerOverseer
+    rclcpp::Node* node;
     typename rclcpp::Client<ServiceT>::SharedPtr client;
 
     //timer and log of when a service timer started
@@ -113,7 +114,7 @@ class MonitoredServiceClient{
     }
 
     //constructor go brrrr
-    MonitoredServiceClient(rclcpp::Node::SharedPtr node, std::string serviceName) : node(node), waitingForClient(false){
+    MonitoredServiceClient(rclcpp::Node *node, std::string serviceName) : node(node), waitingForClient(false){
         client = node->create_client<ServiceT>(serviceName);
         timer = node->create_wall_timer(std::chrono::milliseconds(500), std::bind(&MonitoredServiceClient<ServiceT>::timerCallback, this));
 

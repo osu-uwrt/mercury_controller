@@ -41,9 +41,7 @@ class SimulinkModelClass{
     string fullNodeName;
 
 
-    //list and set param client
-    std::shared_ptr<MonitoredServiceClient<ListParams>> listParamClient;
-    std::shared_ptr<MonitoredServiceClient<SetParams>> setParamClient;
+
 
     //overseer node and node name
     std::shared_ptr<ControllerOverseer> overseer;
@@ -61,6 +59,11 @@ class SimulinkModelClass{
 
     public:
 
+    //list and set param client
+    std::shared_ptr<MonitoredServiceClient<ListParams>> listParamClient;
+    std::shared_ptr<MonitoredServiceClient<SetParams>> setParamClient;
+
+    
     std::vector<std::pair<std::string,int64_t>> intV;
     std::vector<std::pair<std::string,bool>> boolV;
     std::vector<std::pair<std::string,std::vector<int64_t>>> arrayV;
