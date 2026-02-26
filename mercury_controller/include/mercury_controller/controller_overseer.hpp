@@ -11,8 +11,12 @@
 #include <filesystem>
 
 #include "simulink_model.hpp"
+#include "Eigen/Dense"
+
 
 #define FF_PUBLISH_PARAM "disable_native_ff"
+
+#define PARAMETER_SCALE 1000000
 
 
 class ControllerOverseer : public rclcpp::Node {
@@ -77,8 +81,6 @@ class ControllerOverseer : public rclcpp::Node {
     bool publishingFF;
 
     rclcpp::TimerBase::SharedPtr escPowerCheckTimer;
-
-    std::vector<std::pair<std::string,int64_t>> autoffInit;
 
     //parameters
     string robotName, configPath, thrusterSolverName;
@@ -149,30 +151,109 @@ class ControllerOverseer : public rclcpp::Node {
 
     public:
 
+    //construct the complete controller class using the pointer for "this" instance
     void bind_pointers(std::shared_ptr<ControllerOverseer> node){
         completeController = std::make_shared<SimulinkModelClass>(node, "complete_controller");
     }
 
+
+    /*
+    Yaml traversal -- get recursed
+    */
+    void traversal(std::vector<std::pair<std::string,int64_t>>& ints, std::vector<std::pair<std::string,bool>>& bools, std::vector<std::pair<std::string,std::vector<int64_t>>> & arrays, const YAML::Node& tree, const std::string path){
+        switch(tree.Type()){
+            case YAML::NodeType::Map:
+                {
+                    for(YAML::const_iterator it = tree.begin(); it != tree.end(); ++it){
+                        std::string child = it->first.as<std::string>();
+
+                        std::string nextPath;
+                        if(path.empty()){
+                            nextPath = child;
+                        }else{
+                            nextPath = path + "__" + child;
+                        }
+
+                        traversal(ints, bools, arrays, it->second, nextPath);
+                    }
+                    break;
+                }
+            case YAML::NodeType::Sequence:{
+
+                std::vector<int64_t> array;
+
+                for(const auto& item : tree){
+                    if(item.IsScalar()){
+                        try{
+                            int64_t changed = item.as<double>()*PARAMETERSCALE;
+                            array.push_back(changed);
+                        }catch (const YAML::BadConversion& e){
+                            RCLCPP_ERROR(get_logger(), "%s: %s not read properly", path, item.Tag());
+                        }
+
+                    }
+                }
+                if(!path.empty()){
+                    arrays.emplace_back(path, array);
+                }
+                break;
+            }
+
+            case YAML::NodeType::Scalar:{
+                int64_t num = 0;
+                bool boolean;
+                try{
+                    num = tree.as<double>() * PARAMETERSCALE;
+                } catch (const YAML::BadConversion& e){
+                    try{
+                    boolean = tree.as<bool>();
+                    }catch(const YAML::BadConversion& e){
+                        RCLCPP_ERROR(get_logger(), "%s: %s not read properly", path, tree.Tag());
+                        break;
+                    }
+                }
+
+
+                if(!path.empty()){
+                    if(num){
+                        ints.emplace_back(path, num);
+                    }else{
+                        bools.emplace_back(path, boolean);
+                    }
+                }
+                break;
+            }
+
+            default:
+            break;
+
+
+        }
+
+    }
+
+    /*
+    Read both autoff and regular config files and place information into the simulink class
+    */
     void readConfig(){
         try{
             configTree = YAML::LoadFile(configPath);
-
+            traversal(completeController.intV, completeController.boolV, completeController.arrayV, configTree, "");
         }catch(YAML::BadFile &e){
             RCLCPP_ERROR(get_logger(), "Cannot open config file at %s", configPath.c_str());
         }
 
         try{
             autoffTree = YAML::LoadFile(autoffConfigPath);
+            autoffTree = autoffTree["auto_ff"];
+            traversal(completeController.intV, completeController.boolV, completeController.arrayV, autoffTree, "controller__autoff__initial_ff");
         }catch(YAML::BadFile &e){
             RCLCPP_ERROR(get_logger(), "Cannot open config file at %s", autoffconfigPath.c_str());
         }
 
-        
-
-
-
-
     }
+
+    
 
     
 

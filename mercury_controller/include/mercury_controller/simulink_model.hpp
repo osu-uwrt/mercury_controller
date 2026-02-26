@@ -31,7 +31,7 @@ using Parameter = rcl_interfaces::msg::Parameter;
 using ParameterType = rclcpp::ParameterType;
 using ParameterValue = rcl_interfaces::msg::ParameterValue;
 
-#define PARAMETER_SCALE 1000000
+
 #define RELOAD_TIME 2
 
 class SimulinkModelClass{

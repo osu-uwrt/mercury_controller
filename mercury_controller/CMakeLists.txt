@@ -21,6 +21,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 #thruster test script
 add_executable(thruster_test_canbus models/complete_system/send_thruster_cmd_canbus.c)
@@ -39,6 +40,7 @@ ament_target_dependencies(controller_overseer
   rcl_interfaces
   std_srvs
   riptide_msgs2
+  Eigen3
 )
 
 
