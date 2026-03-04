@@ -16,7 +16,7 @@
 
 #define FF_PUBLISH_PARAM "disable_native_ff"
 
-#define PARAMETER_SCALE 1000000
+#define PARAMETERSCALE 1000000
 
 
 /*
@@ -56,7 +56,7 @@ T getYamlNodeAs(const YAML::Node& n, const std::vector<std::string>& keywords)
 /*
     Helper function to quickly go to Eigen 3d vector object
 */
-std2v3d(std::vector<double> stdVect)
+Eigen::Vector3d std2v3d(std::vector<double> stdVect)
 {
     return v3d(stdVect[0], stdVect[1], stdVect[2]);
 }
@@ -74,6 +74,7 @@ class ControllerOverseer : public rclcpp::Node {
 
     using string = std::string;
 
+    using namespace std::chrono_literals;
     public:
 
     ControllerOverseer() : Node("controller_overseer") {
@@ -123,8 +124,8 @@ class ControllerOverseer : public rclcpp::Node {
 
         tfNamespace = get_parameter("robot").as_string();
 
-        updateTimer = create_wall_timer(std::chrono_literals::1s, /*callback*/);
-        weightTimer = create_wall_timer(std::chrono_literals::1s, /*callback*/); 
+        updateTimer = create_wall_timer(1s, /*callback*/);
+        weightTimer = create_wall_timer(1s, /*callback*/); 
 
     }
 
@@ -165,7 +166,7 @@ class ControllerOverseer : public rclcpp::Node {
                              changed = item.as<double>()*PARAMETERSCALE;
                             array.push_back(changed);
                         }catch (const YAML::BadConversion& e){
-                            RCLCPP_ERROR(get_logger(), "%s: %s not read properly", path, item.Tag());
+                            RCLCPP_ERROR(get_logger(), "%s not read properly", path.c_str());
                         }
 
                     }
@@ -234,7 +235,7 @@ class ControllerOverseer : public rclcpp::Node {
         try{
             autoffTree = YAML::LoadFile(autoffConfigPath);
             autoffTree = autoffTree["auto_ff"];
-            traversal(completeController.intV, completeController.boolV, completeController.arrayV, autoffTree, "controller__autoff__initial_ff");
+            traversal(completeController->intV, completeController->boolV, completeController->arrayV, autoffTree, "controller__autoff__initial_ff");
         }catch(YAML::BadFile &e){
             RCLCPP_ERROR(get_logger(), "Cannot open config file at %s", autoffconfigPath.c_str());
         }
@@ -243,6 +244,38 @@ class ControllerOverseer : public rclcpp::Node {
 
     }
 
+    void generateThrusterForceMatrix(const YAML::Node& thrusterInfo, const YAML::Node& com){
+        std::vector<double> thrusterFT;
+        std::vector<double> comXYZ = com.as<std::vector<double>>();
+
+        int i = 0;
+        for(const auto& thruster : thrusterInfo){
+            std::vector<double> thrusterPose = getYamlNodeAs<std::vector<double>>(thruster, {"pose"});
+            m3d R = 
+                    Eigen::AngleAxisd(thrusterPose[5],   Eigen::Vector3d::UnitZ()).toRotationMatrix() *
+                    Eigen::AngleAxisd(thrusterPose[4], Eigen::Vector3d::UnitY()).toRotationMatrix() *
+                    Eigen::AngleAxisd(thrusterPose[3],  Eigen::Vector3d::UnitX()).toRotationMatrix();
+
+            v3d forceVector = R * Eigen::Vector3d::UnitX(); 
+
+            std::vector<double> positionFromCom;
+            for(int j = 0; j<3; j++){
+                positionFromCom.push_back(thrusterPose[j] - comXYZ[j]);
+            }
+                
+            v3d momentArm(positionFromCom[0], positionFromCom[1], positionFromCom[2]);
+            v3d torque = momentArm.cross(forceVector);
+                
+            thrusterFT.push_back(forceVector(0));
+            thrusterFT.push_back(forceVector(1));
+            thrusterFT.push_back(forceVector(2));
+            thrusterFT.push_back(torque(0));
+            thrusterFT.push_back(torque(1));
+            thrusterFT.push_back(torque(2));
+        }
+
+        completeController->arrayV.emplace_back("talos_wrenchmat", thrusterFT);
+    }
 
     private:
 
@@ -253,7 +286,7 @@ class ControllerOverseer : public rclcpp::Node {
     YAML::Node configTree;
     YAML::Node autoffTree;
 
-    Yaml::Node thrusterInfo;
+    YAML::Node thrusterInfo;
     YAML::Node com;
 
     bool activeThrusters[8];
