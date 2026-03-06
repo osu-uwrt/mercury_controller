@@ -116,7 +116,7 @@ class ControllerOverseer : public rclcpp::Node {
         }
 
             
-        thrusterTelemetry = create_subscription</*DShotPartialTelemetry*/>("/state/thrusters/telemetry", rclcpp::SystemDefaultsQoS(), /*bind callback*/);        
+        thrusterTelemetry = create_subscription<riptide_msgs2::msg::DshotPartialTelemetry>("/state/thrusters/telemetry", rclcpp::SystemDefaultsQoS(), /*bind callback*/);        
         setThrusterSolverParams = create_client<rcl_interfaces::srv::SetParameters>(thrusterSolverName + "/set_parameters");
 
         motionEnabledPub = create_publisher<std_msgs::msg::Bool>("controller/motion_enabled", rclcpp::SystemDefaultsQoS());
@@ -339,8 +339,69 @@ class ControllerOverseer : public rclcpp::Node {
             autoffConfigPath = controlShareDir + autoFFSubpath;
         }else{
             RCLCPP_INFO(get_logger(), "I think I am running on the orin!");
-            autoffConfigPath = "/bin" + robotName + "_autoff.yaml";
+            autoffConfigPath = "/bin" + robotName + "_autoff.yaml";     //this will need to change it is no longer /bin
         }
+    }
+
+    thrusterTelemetryCB(riptide_msgs2::msg::DshotPartialTelemetry msg){
+        bool adjustWeights = false;
+
+        escPowerCheckTimer.reset();
+
+        if(msg.start_thruster_num == 0){
+            int i = 0;
+            for(auto esc : msg.esc_telemetry){
+                if(!esc.thruster_ready && activeThrusters[i] == true){
+                    activeThrusters[i] = false;
+                    adjustWeights = true;
+
+                }else if(esc.thruster_ready && activeThrusters[i] == false){
+                    activeThrusters[i] = true;
+                    adjustWeights = true;
+                }
+                i++;
+            }
+            if(msg.disabled_flags != 0){
+                escPowerStopsLow++;
+            }else{
+                escPowerStopsLow = 0;
+            }
+        }else{
+            int i = 4;
+            for(auto esc : msg.esc_telemetry){
+                if(!esc.thruster_ready && activeThrusters[i] == true){
+                    activeThrusters[i] = false;
+                    adjustWeights = true;
+
+                }else if(esc.thruster_ready && activeThrusters[i] == false){
+                    activeThrusters[i] = true;
+                    adjustWeights = true;
+                }
+                i++;
+            }
+            if(msg.disabled_flags != 0){
+                escPowerStopsHigh++;
+            }else{
+                escPowerStopsHigh = 0;
+            }
+        }
+
+        if(adjustWeights){
+            adjustThrusterWeights();
+        }
+        
+        std_msgs::msg::Bool motionMsg;
+
+        if(escPowerStopsLow > ESC_POWER_STOP_TOLERANCE || escPowerStopsHigh > ESC_POWER_STOP_TOLERANCE){
+            motionMsg.data = false;
+            enabled =false;
+        }else{
+            motionMsg.data = true;
+            enabled = true;           
+        }
+
+        motionEnabledPub->publish(motionMsg);
+
     }
 
     private:
@@ -365,7 +426,7 @@ class ControllerOverseer : public rclcpp::Node {
 
     std::shared_ptr<SimulinkModelClass> completeController;
 
-    rclcpp::Subscriber</*DShotPartialTelemetry*/>::SharedPtr thrusterTelemetry;
+    rclcpp::Subscriber<riptide_msgs2::msg::DshotPartialTelemetry>::SharedPtr thrusterTelemetry;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr motionEnabledPub;
     rclcpp::Service<rcl_interfaces::srv::SetParameters>::SharedPtr setThrusterSolverParams;
 
