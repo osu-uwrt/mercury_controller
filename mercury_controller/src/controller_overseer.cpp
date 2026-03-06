@@ -343,7 +343,7 @@ class ControllerOverseer : public rclcpp::Node {
         }
     }
 
-    thrusterTelemetryCB(riptide_msgs2::msg::DshotPartialTelemetry msg){
+    thrusterTelemetryCB(riptide_msgs2::msg::DshotPartialTelemetry::SharedPtr msg){
         bool adjustWeights = false;
 
         escPowerCheckTimer.reset();
