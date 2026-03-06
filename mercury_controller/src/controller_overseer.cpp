@@ -3,12 +3,16 @@
 #include <rclcpp/rclcpp.hpp>
 #include <yaml-cpp/yaml.h>
 #include <riptide_msgs2/msg/dshot_partial_telemetry.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include <memory>
 #include <string>
+#include <sstream>
+#include <getline>
+#include <algorithm>
+#include <filesystem>
 #include <unordered_map>
 #include <vector>
-#include <filesystem>
 
 #include "simulink_model.hpp"
 #include "Eigen/Dense"
@@ -70,7 +74,13 @@ class ControllerOverseer : public rclcpp::Node {
     using vXd = Eigen::VectorXd;
     using m3d = Eigen::Matrix3d;
     using mXd = Eigen::MatrixXd;
-    using quat = Eigen::Quaterniond;    
+    using quat = Eigen::Quaterniond;   
+    
+    using fs = std::filesystem;
+
+    using int_vector = std::vector<std::pair<std::string,double>>;
+    using bool_vector = std::vector<std::pair<std::string,bool>>;
+    using array_vector = std::vector<std::pair<std::string,std::vector<double>>>;
 
     using string = std::string;
 
@@ -138,13 +148,12 @@ class ControllerOverseer : public rclcpp::Node {
     /*
     Yaml traversal -- get recursed
     */
-    void traversal(std::vector<std::pair<std::string,double>>& ints, std::vector<std::pair<std::string,bool>>& bools, std::vector<std::pair<std::string,std::vector<double>>> & arrays, const YAML::Node& tree, const std::string path){
+    void traversal(int_vector& ints, bool_vector& bools, array_vector& arrays, const YAML::Node& tree, const std::string path){
         switch(tree.Type()){
             case YAML::NodeType::Map:
                 {
                     for(YAML::const_iterator it = tree.begin(); it != tree.end(); ++it){
                         std::string child = it->first.as<std::string>();
-
                         std::string nextPath;
                         if(path.empty()){
                             nextPath = child;
@@ -277,6 +286,63 @@ class ControllerOverseer : public rclcpp::Node {
         completeController->arrayV.emplace_back("talos_wrenchmat", thrusterFT);
     }
 
+    void setConfigPath(){
+        configPath = get_parameter("vehicle_config").as_string();
+        if(configPath == ""){
+            string descriptionsShareDir = get_package_share_directory("riptide_descriptions2");
+            string robotConfigSubpath = "config/" + robotName + ".yaml";
+            
+            configPath = descriptionsShareDir + "/" + robotConfigSubpath;
+            
+            std::vector<string> dirSplit;
+            std::stringstream ss(configPath);
+            string subPath;
+
+            while (std::getline(ss, subPath, '/')) {
+                parts.push_back(subPath);
+            }
+            
+            bool flag = false;
+            for (const string& i : dirSplit) {
+                if(i == "install"){
+                    flag = true;
+                    break;
+                }        
+            }
+            if(flag){
+                string colconRoot = "";
+                int i = 0;
+                while(dirSplit[i] != "install"){
+                    colconRoot += "/" + dirSplit[i];
+                    i++;
+                }
+                colconRoot += "/src";
+                
+                std::vector<string> possiblePaths;
+                possiblePaths.push_back(colconRoot + "/riptide_core/riptide_descriptions/" + robotConfigSubpath);
+                possiblePaths.push_back(colconRoot + "/riptide_descriptions/" + robotConfigSubpath);
+
+                for(const string& path : possiblePaths){
+                    if(fs::exists(path)){
+                        configPath = path;
+                        RCLCPP_INFO(get_logger(), "Discovered source directory, overriding descriptions to use %s", configPath.c_str());
+                    }
+                }
+            }
+        }
+
+        string controlShareDir = get_package_share_directory("riptide_controllers2");
+        string autoFFSubpath = "config/" + robotName + "_autoff.yaml";
+
+        if(fs::exists("/home/ros/colcon_deploy")){
+            RCLCPP_INFO(get_logger(), "I think I am not running on the orin!");
+            autoffConfigPath = controlShareDir + autoFFSubpath;
+        }else{
+            RCLCPP_INFO(get_logger(), "I think I am running on the orin!");
+            autoffConfigPath = "/bin" + robotName + "_autoff.yaml";
+        }
+    }
+
     private:
 
     bool waitingOnInit;
@@ -332,10 +398,5 @@ class ControllerOverseer : public rclcpp::Node {
     //parameters
     string robotName, configPath, thrusterSolverName;
     bool writeAutoFF;
-
-    
-
-    
-
 
 };
