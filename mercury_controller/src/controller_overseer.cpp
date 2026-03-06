@@ -404,6 +404,37 @@ class ControllerOverseer : public rclcpp::Node {
 
     }
 
+    escPowerTimeout(){
+        if(!enabled){
+            RCLCPP_WARN(get_logger(), "Not recieving thruster telemetry!");
+        }
+
+        std_msgs::msg::Bool motionMsg;
+        motionMsg.data = false;
+        enabled = false;
+        motionEnabledPub->publish(motionMsg);
+    }
+
+    setThrusterModeCB(std_msgs::msg::Int16::SharedPtr msg){
+        if(msg.data != thrusterMode){
+            thrusterMode = msg.data;
+            adjustThrusterWeights();
+        }
+
+    }
+    
+    //TODO:: Finish
+    odometryCB(nav_msgs::msg::Odometry::SharedPtr msg){
+        if(!startTime){
+            startTime = get_clock()->now();
+        }
+        
+        bool submerged[8] = [false,false,false,false,false,false,false,false];
+        
+
+
+    }
+
     private:
 
     bool waitingOnInit;
