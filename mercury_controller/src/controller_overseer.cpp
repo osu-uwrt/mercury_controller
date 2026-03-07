@@ -13,6 +13,9 @@
 #include <filesystem>
 #include <unordered_map>
 #include <vector>
+#include <exception>
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include "tf2/time.h"
 
 #include "simulink_model.hpp"
 #include "Eigen/Dense"
@@ -343,7 +346,7 @@ class ControllerOverseer : public rclcpp::Node {
         }
     }
 
-    thrusterTelemetryCB(riptide_msgs2::msg::DshotPartialTelemetry::SharedPtr msg){
+    void thrusterTelemetryCB(riptide_msgs2::msg::DshotPartialTelemetry::SharedPtr msg){
         bool adjustWeights = false;
 
         escPowerCheckTimer.reset();
@@ -404,7 +407,7 @@ class ControllerOverseer : public rclcpp::Node {
 
     }
 
-    escPowerTimeout(){
+    void escPowerTimeout(){
         if(!enabled){
             RCLCPP_WARN(get_logger(), "Not recieving thruster telemetry!");
         }
@@ -415,7 +418,7 @@ class ControllerOverseer : public rclcpp::Node {
         motionEnabledPub->publish(motionMsg);
     }
 
-    setThrusterModeCB(std_msgs::msg::Int16::SharedPtr msg){
+    void setThrusterModeCB(std_msgs::msg::Int16::SharedPtr msg){
         if(msg.data != thrusterMode){
             thrusterMode = msg.data;
             adjustThrusterWeights();
@@ -423,17 +426,139 @@ class ControllerOverseer : public rclcpp::Node {
 
     }
     
-    //TODO:: Finish
-    odometryCB(nav_msgs::msg::Odometry::SharedPtr msg){
+
+    void odometryCB(nav_msgs::msg::Odometry::SharedPtr msg){
         if(!startTime){
             startTime = get_clock()->now();
         }
         
         bool submerged[8] = [false,false,false,false,false,false,false,false];
         
+        double killPlane = getYamlNodeAs<double>(configTree, {"controller_overseer", "thruster_kill_plane"});
 
+        geometry_msgs::msg::TransformStamped pos;
+        try{
+            for(int i = 0; i < 8; i++){
+
+                pos = tfBuffer->lookup_transform("world", tfNamespace + "thruster_" + std::to_string(i), tf2::TimePointZero);
+
+                if(pos.transform.translation.z < killPlane){
+                    submerged[i] = true;
+                }
+            }
+            if(submerged != submergedThrusters){
+                submergedThrusters = submerged;
+                adjustThrusterWeights();
+            }
+        }
+        catch(const std::exception& ex){
+            if(get_clock().now().to_msg().sec >= 1.0 + startTime.to_msg().sec){
+                RCLCPP_ERROR(get_logger(), "Thruster position lookup failed with exception %s", ex.what());
+            }
+        }
+    }
+
+    void adjustThrusterWeights(){
+        int activeThrusterCount = 0;
+        int submergedThrustersCount = 0;
+
+        for(int i = 0; i<activeThrusters.size(); i++){
+            if(activeThrusters[i]){
+                activeThrusterCount++;
+
+                if(!submergedThrusters[i]){
+                    thrusterWeights[i] = surfaceWeight;
+                }else{
+                    submergedThrustersCount++;
+                    thrusterWeights[i] = defaultWeight;
+                }
+            }else{
+                thrusterWeights[i] = disabledWeight;
+            }
+        }
+
+        if(activeThrusterCount <= 6){
+            if(enabled){
+                RCLCPP_ERROR(get_logger(), "System is underactuated. Only: " + std::to_string(activeThrusterCount) + " thrusters are active. Killing thrusters!");
+                enabled = false;
+            }else{
+                enabled = true;
+            }
+        }
+
+        if(submergedThrusters >= 8 && thrusterMode == 2){
+            thrusterWeights[4] = lowDowndraftWeight;
+            thrusterWeights[5] = lowDowndraftWeight;
+        } 
+
+        if(thrusterMode == 0){
+            for(int i = 0; i < thrusterWeights.size(); i++){
+                thrusterWeights[i] = 0;
+            }
+        }
+
+        geometry_msgs::msg::Int32MultiArray msg;
+        
+        std::vector<int> weights;
+        for(const double& weight : thrusterWeights){
+            weights.push_back(weight);
+        }
+
+        msg.data = weights;
+
+        weightsPub->publish(msg);
+    }
+
+    void setTeleop(std_srvs::srv::SetBool::Request::SharedPtr req, std_srvs::srv::SetBool::SharedFuture fut){
 
     }
+
+    void doUpdate(){
+    std::vector<std::string> activeROSNodeNames;
+
+    std::vector<std::pair<string, string>> activeROSNodes = get_node_graph_interface()->get_node_names_and_namespaces();
+
+    for (const auto& node : active_rosnodes) {
+        std::string node_name = node.second + "/" + node.first;
+
+        // Remove double leading "//"
+        if (node_name.rfind("//", 0) == 0) { 
+            node_name = node_name.substr(1);
+        }
+
+        active_rosnode_names.push_back(node_name);
+        }
+
+        completeController->checkIfActive(activeROSNodeNames);
+
+        if(!get_parameter(FF_PUBLISH_PARAM).as_bool()){
+            publishingFF = true;
+
+            geometry_msgs::msg::Twist msg;
+            msg.linear.x = baseWrench[0];
+            msg.linear.y = baseWrench[1];
+            msg.linear.z = baseWrench[2];
+            msg.angular.x = baseWrench[3];
+            msg.angular.y = baseWrench[4];
+            msg.angular.z = baseWrench[5];
+
+            ffPub->publish(msg);
+        }else if(publishingFF){
+
+            publishingFF = false;
+            geometry_msgs::msg::Twist msg;
+            msg.linear.x = 0.0;
+            msg.linear.y = 0.0;
+            msg.linear.z = 0.0;
+            msg.angular.x = 0.0;
+            msg.angular.y = 0.0;
+            msg.angular.z = 0.0;
+
+            ffPub->publish(msg);
+        }
+    }
+
+
 
     private:
 
