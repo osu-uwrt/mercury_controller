@@ -5,8 +5,10 @@
 #include <riptide_msgs2/msg/dshot_partial_telemetry.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
+#include <cmath>
 #include <memory>
 #include <string>
+#include <fstream>
 #include <sstream>
 #include <getline>
 #include <algorithm>
@@ -22,8 +24,8 @@
 
 
 #define FF_PUBLISH_PARAM "disable_native_ff"
-
 #define PARAMETERSCALE 1000000
+#define AUTOFF_INIT_TOLERANCE .01
 
 
 /*
@@ -77,7 +79,14 @@ class ControllerOverseer : public rclcpp::Node {
     using vXd = Eigen::VectorXd;
     using m3d = Eigen::Matrix3d;
     using mXd = Eigen::MatrixXd;
-    using quat = Eigen::Quaterniond;   
+    using quat = Eigen::Quaterniond;  
+
+    using ListParams = rcl_interfaces::srv::ListParameters;
+    using SetParams = rcl_interfaces::srv::SetParameters;
+    using SetParamsResult = rcl_interfaces::msg::SetParametersResult;
+    using Parameter = rcl_interfaces::msg::Parameter;
+    using ParameterType = rclcpp::ParameterType;
+    using ParameterValue = rcl_interfaces::msg::ParameterValue;
     
     using fs = std::filesystem;
 
@@ -87,7 +96,6 @@ class ControllerOverseer : public rclcpp::Node {
 
     using string = std::string;
 
-    using namespace std::chrono_literals;
     public:
 
     ControllerOverseer() : Node("controller_overseer") {
@@ -118,27 +126,30 @@ class ControllerOverseer : public rclcpp::Node {
             thrusterWeights[i] = 1;
         }
 
-            
-        thrusterTelemetry = create_subscription<riptide_msgs2::msg::DshotPartialTelemetry>("/state/thrusters/telemetry", rclcpp::SystemDefaultsQoS(), /*bind callback*/);        
+
+        using std::placeholders::_1,std::placeholders::_2;
+
+        thrusterTelemetry = create_subscription<riptide_msgs2::msg::DshotPartialTelemetry>("/state/thrusters/telemetry", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::thrusterTelemetryCB, this, _1));        
         setThrusterSolverParams = create_client<rcl_interfaces::srv::SetParameters>(thrusterSolverName + "/set_parameters");
 
         motionEnabledPub = create_publisher<std_msgs::msg::Bool>("controller/motion_enabled", rclcpp::SystemDefaultsQoS());
-        thrusterMode = create_subscription<std_msgs::msg::Int16>("thrusterSolver/thrusterState", rclcpp::SystemDefaultsQoS(), /*bind callback*/);
-        odom = create_subscription<nav_msgs::msg::Odometry>("odometry/filtered", rclcpp::SystemDefaultsQoS(), /*callback*/);
-        ffAutoTune = create_subscription<geometry_msgs::msg::Twist>("ff_auto_tune", rclcpp::SystemDefaultsQoS(), /*callback*/);
+        thrusterMode = create_subscription<std_msgs::msg::Int16>("thrusterSolver/thrusterState", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::setThrusterModeCB, this, _1));
+        odom = create_subscription<nav_msgs::msg::Odometry>("odometry/filtered", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::odometryCB, this, _1));
+        ffAutoTune = create_subscription<geometry_msgs::msg::Twist>("ff_auto_tune", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::ffAutoTuneCB, this, _1));
         weightsPub = create_publisher<std::msgs::Int32MultiArray>("controller/solver_weights", rclcpp::SystemDefaultsQoS());
         ffPub = create_publisher<geometry_msgs::msg::Twist>("controller/FF_body_force", rclcpp::SystemDefaultsQoS());
         reInitPub = create_publisher<std_msgs::msg::Empty>("controller/re_init_accumulators", rclcpp::SystemDefaultsQoS());
 
-        setTeleop = create_client<std_srvs::srv::SetBool>("setTeleop", /*callback*/);
+        setTeleop = create_service<std_srvs::srv::SetBool>("setTeleop", std::bind(&ControllerOverseer::setTeleop, this, _1, _2));
 
         tfBuffer = std::make_shared<tf2_ros::Buffer>(get_clock());
         tfListener = std::make_shared<tf2_ros::TransformListener>(*tfBuffer);
 
         tfNamespace = get_parameter("robot").as_string();
 
-        updateTimer = create_wall_timer(1s, /*callback*/);
-        weightTimer = create_wall_timer(1s, /*callback*/); 
+        using namespace std::chrono_literals;
+        updateTimer = create_wall_timer(1s, std::bind(&ControllerOverseer::doUpdate, this));
+        weightTimer = create_wall_timer(1s, std::bind(&ControllerOverseer::adjustThrusterWeights, this)); 
 
     }
 
@@ -509,8 +520,38 @@ class ControllerOverseer : public rclcpp::Node {
         weightsPub->publish(msg);
     }
 
-    void setTeleop(std_srvs::srv::SetBool::Request::SharedPtr req, std_srvs::srv::SetBool::SharedFuture fut){
+    void setTeleop(std_srvs::srv::SetBool::Request::SharedPtr req, std_srvs::srv::SetBool::Response::SharedPtr res){
+        try{
+            ParameterValue pVal;
+            pVal.type = ParameterType::PARAMETER_INTEGER_ARRAY;
 
+            if(req->data){
+                pVal.integer_array_value = [3000000, 3000000, 2000000, 1000000, 1000000, 3000000];
+                res->message = "Successfully enabled teleop!";
+            }else{
+                pVal.integer_array_value = getYamlNodeAs<std::vector<int>>(configTree, {"controller", "active_force_control"});
+                res->message = "Successfully enabled active control!";
+            }
+
+            Parameter param;
+            param.value = pVal;
+            param.name = "controller__active_force_mask";
+
+            SetParams::Request::SharedPtr setParamsRequest;
+            setParamsRequest->parameters = [param];
+
+            completeController->setParamClient.scheduleCall(setParamsRequest, 
+                                                                [this, req](SetParams::Response::SharedPtr res){
+                                                                completeController->setParametersDoneCallback(res);
+                                                            });
+
+            res->success = true;
+                
+        }catch(std::exception &e){
+            RCLCPP_WARN(get_logger(), "Failed to initialize active control, model may not be started");
+            res->success = false;
+            res->message = "Failed to initialize active control, model may not be started";
+        }
     }
 
     void doUpdate(){
@@ -558,6 +599,55 @@ class ControllerOverseer : public rclcpp::Node {
         }
     }
 
+    //ASK ABOUT THIS LOGIC JOHN!!!!
+    void ffAutoTuneCB(geometry_msgs::msg::Twist msg){
+        if(!writeAutoFF || !completeController->paramsLoaded || autoffConfigPath == ""){
+            return;
+        }
+
+        std::vector<double> initFF;
+        if(waitingOnInit){
+            bool initFound = false;
+            for(const std::pair<string, std::vector<double>>& pair : array_vector completeController->arrayV){
+                if(pair.first == "controller__autoff__initial_ff"){
+                    initFF = pair.second;
+                    initFound = true;
+                    break;
+                }
+            }
+
+            
+            if(std::abs(initFF[0] - msg.linear.x) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[1] - msg.linear.y) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[2] - msg.linear.z) < AUTOFF_INIT_TOLERANCE 
+                && std::abs(initFF[3] - msg.angular.x) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[4] - msg.angular.y) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[1] - msg.angular.z) < AUTOFF_INIT_TOLERANCE){
+                    
+                    waitingOnInit = false;
+            } else{
+
+                std_msgs::msg::Empty emptyMsg;
+                reInitPub->publish(emptyMsg);
+            }
+            
+            return;
+        }
+
+        if(initFF[0] != msg.linear.x || initFF[1] != msg.linear.y || initFF[2] != msg.linear.z || initFF[3] != msg.angular.x || initFF[4] != msg.angular.y || initFF[5] != msg.angular.z){
+            string autoFFstr = "autoff: [";
+            for(int i = 0; i<5 i++){
+                autoFFstr += std::to_string(initFF[i]) + ",";
+            }
+            autoFFstr += std::to_string(initFF[5]) + "]";
+            
+            std::ofstream ffconfig(autoffConfigPath);
+            if(ffconfig.is_open()){
+                ffconfig << autoFFstr;
+            }else{
+                RCLCPP_ERROR(get_logger(), "Cannot open ff auto tune file at: %s", autoffconfigPath.c_str());
+            }
+            ffconfig.close();
+        }
+
+    }
+
 
 
     private:
@@ -574,11 +664,11 @@ class ControllerOverseer : public rclcpp::Node {
 
     bool activeThrusters[8];
     bool submergedThrusters[8];
-    int thrusterWeights[8];
+    double thrusterWeights[8];
 
     int thrusterMode;
 
-    string autoffConfigPath;
+    string autoffConfigPath = "";
 
     std::shared_ptr<SimulinkModelClass> completeController;
 
@@ -593,7 +683,7 @@ class ControllerOverseer : public rclcpp::Node {
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr ffPub;
     rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr reInitPub;
 
-    rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr setTeleop;
+    rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr setTeleop;
 
     tf2_ros::Buffer::SharedPtr tfBuffer;
     tf2_ros::TransformListener::SharedPtr tfListener;
