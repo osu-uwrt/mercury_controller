@@ -36,13 +36,11 @@ using ParameterValue = rcl_interfaces::msg::ParameterValue;
 
 class SimulinkModelClass{
 
+    public:
 
     bool modelActive;
     string fullNodeName;
-
-
-
-
+    
     //overseer node and node name
     std::shared_ptr<ControllerOverseer> overseer;
     string nodeName;
@@ -57,7 +55,7 @@ class SimulinkModelClass{
     //have params been loaded
     bool paramsLoaded;
 
-    public:
+
 
     //list and set param client
     std::shared_ptr<MonitoredServiceClient<ListParams>> listParamClient;

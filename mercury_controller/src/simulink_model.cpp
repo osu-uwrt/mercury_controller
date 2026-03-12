@@ -159,7 +159,7 @@
 
         //loop through all responses
         bool success = true;
-        for(int i = 0; i < res->results.size(); i++){
+        for(int i = 0; i < sizeof(res->results)/sizeof(res->results[0]); i++){
             //if result is successful and parameter is not known, add to known parameters
             if(res->results[i].successful && knownParams.find(req->parameters[i].name) == knownParams.end()){
                 knownParams.insert(req->parameters[i].name);

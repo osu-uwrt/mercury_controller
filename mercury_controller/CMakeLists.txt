@@ -12,6 +12,7 @@ find_package(rcl_interfaces REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(riptide_msgs2 REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
@@ -27,7 +28,7 @@ find_package(Eigen3 REQUIRED)
 add_executable(thruster_test_canbus models/complete_system/send_thruster_cmd_canbus.c)
 target_compile_definitions(thruster_test_canbus PUBLIC ENABLE_THRUSTER_TEST) #enable the thruster test code in send_thruster_cmd_canbus.c
 
-add_executable(controller_overseer src/controller_overseer.cpp src/simulink_model.cpp)
+add_executable(controller_overseer src/controller_overseer.cpp src/simulink_model.cpp src/monitored_service_client.cpp src/overseer_util.cpp)
 
 
 target_include_directories(controller_overseer PUBLIC
@@ -38,10 +39,17 @@ target_include_directories(controller_overseer PUBLIC
 ament_target_dependencies(controller_overseer
   rclcpp
   rcl_interfaces
+  nav_msgs
+  tf2
+  tf2_ros
   std_srvs
   riptide_msgs2
   Eigen3
+  yaml-cpp
 )
+
+target_link_libraries(controller_overseer
+  ${YAML_CPP_LIBRARIES})
 
 
 install(TARGETS thruster_test_canbus

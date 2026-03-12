@@ -1,104 +1,8 @@
-#pragma once
 
-#include <rclcpp/rclcpp.hpp>
-#include <yaml-cpp/yaml.h>
-#include <riptide_msgs2/msg/dshot_partial_telemetry.hpp>
-#include <ament_index_cpp/get_package_share_directory.hpp>
-
-#include <cmath>
-#include <memory>
-#include <string>
-#include <fstream>
-#include <sstream>
-#include <getline>
-#include <algorithm>
-#include <filesystem>
-#include <unordered_map>
-#include <vector>
-#include <exception>
-#include "geometry_msgs/msg/transform_stamped.hpp"
-#include "tf2/time.h"
-
-#include "simulink_model.hpp"
-#include "Eigen/Dense"
+#include "controller_overseer.hpp"
 
 
-#define FF_PUBLISH_PARAM "disable_native_ff"
-#define PARAMETERSCALE 1000000
-#define AUTOFF_INIT_TOLERANCE .01
-
-
-/*
-    Helper function to make a yaml node into a vector, used for thrusters
-*/
-template<typename T>
-T getYamlNodeAs(const YAML::Node& n, const std::vector<std::string>& keywords)
-{
-    if(keywords.empty())
-    {
-        throw std::runtime_error("getYamlNodeAs() requires at least one keyword.");
-    }
-
-    YAML::Node node = YAML::Clone(n);
-    
-    try
-    {
-        for(std::string s : keywords)
-        {
-            node = node[s];
-        }
-
-        return node.as<T>();
-    } catch(YAML::Exception& e)
-    {
-        std::string msg = "Failed to parse value at tag " + keywords[0];
-        for(size_t i = 1; i < keywords.size(); i++)
-        {
-            msg +=  " -> " + keywords[i];
-        }
-        
-        msg += ": " + std::string(e.what());
-        throw std::runtime_error(msg);
-    }
-}
-
-/*
-    Helper function to quickly go to Eigen 3d vector object
-*/
-Eigen::Vector3d std2v3d(std::vector<double> stdVect)
-{
-    return v3d(stdVect[0], stdVect[1], stdVect[2]);
-}
-
-
-
-class ControllerOverseer : public rclcpp::Node {
-
-    using v3d = Eigen::Vector3d;
-    using v4d = Eigen::Vector4d;
-    using vXd = Eigen::VectorXd;
-    using m3d = Eigen::Matrix3d;
-    using mXd = Eigen::MatrixXd;
-    using quat = Eigen::Quaterniond;  
-
-    using ListParams = rcl_interfaces::srv::ListParameters;
-    using SetParams = rcl_interfaces::srv::SetParameters;
-    using SetParamsResult = rcl_interfaces::msg::SetParametersResult;
-    using Parameter = rcl_interfaces::msg::Parameter;
-    using ParameterType = rclcpp::ParameterType;
-    using ParameterValue = rcl_interfaces::msg::ParameterValue;
-    
-    using fs = std::filesystem;
-
-    using int_vector = std::vector<std::pair<std::string,double>>;
-    using bool_vector = std::vector<std::pair<std::string,bool>>;
-    using array_vector = std::vector<std::pair<std::string,std::vector<double>>>;
-
-    using string = std::string;
-
-    public:
-
-    ControllerOverseer() : Node("controller_overseer") {
+    ControllerOverseer::ControllerOverseer() : Node("controller_overseer") {
 
         //parameter declarations
         declare_parameter("robot", "");
@@ -115,10 +19,7 @@ class ControllerOverseer : public rclcpp::Node {
 
         declare_parameter(FF_PUBLISH_PARAM, false);
 
-        setConfigPath();
-        readConfig();
 
-        generateThrusterForceMatrix(thrusterInfo, com);
 
         for(int i = 0; i < 8; i++){
             activeThrusters[i] = true;
@@ -133,16 +34,16 @@ class ControllerOverseer : public rclcpp::Node {
         setThrusterSolverParams = create_client<rcl_interfaces::srv::SetParameters>(thrusterSolverName + "/set_parameters");
 
         motionEnabledPub = create_publisher<std_msgs::msg::Bool>("controller/motion_enabled", rclcpp::SystemDefaultsQoS());
-        thrusterMode = create_subscription<std_msgs::msg::Int16>("thrusterSolver/thrusterState", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::setThrusterModeCB, this, _1));
+        thrusterModeSub = create_subscription<std_msgs::msg::Int16>("thrusterSolver/thrusterState", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::setThrusterModeCB, this, _1));
         odom = create_subscription<nav_msgs::msg::Odometry>("odometry/filtered", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::odometryCB, this, _1));
         ffAutoTune = create_subscription<geometry_msgs::msg::Twist>("ff_auto_tune", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::ffAutoTuneCB, this, _1));
-        weightsPub = create_publisher<std::msgs::Int32MultiArray>("controller/solver_weights", rclcpp::SystemDefaultsQoS());
+        weightsPub = create_publisher<std_msgs::msg::Int32MultiArray>("controller/solver_weights", rclcpp::SystemDefaultsQoS());
         ffPub = create_publisher<geometry_msgs::msg::Twist>("controller/FF_body_force", rclcpp::SystemDefaultsQoS());
         reInitPub = create_publisher<std_msgs::msg::Empty>("controller/re_init_accumulators", rclcpp::SystemDefaultsQoS());
 
-        setTeleop = create_service<std_srvs::srv::SetBool>("setTeleop", std::bind(&ControllerOverseer::setTeleop, this, _1, _2));
+        setTeleop = create_service<std_srvs::srv::SetBool>("setTeleop", std::bind(&ControllerOverseer::setTeleopCB, this, _1, _2));
 
-        tfBuffer = std::make_shared<tf2_ros::Buffer>(get_clock());
+        tfBuffer = std::make_unique<tf2_ros::Buffer>(get_clock());
         tfListener = std::make_shared<tf2_ros::TransformListener>(*tfBuffer);
 
         tfNamespace = get_parameter("robot").as_string();
@@ -154,15 +55,19 @@ class ControllerOverseer : public rclcpp::Node {
     }
 
     //construct the complete controller class using the pointer for "this" instance
-    void bind_pointers(std::shared_ptr<ControllerOverseer> node){
+    void ControllerOverseer::init(std::shared_ptr<ControllerOverseer> node){
         completeController = std::make_shared<SimulinkModelClass>(node, "complete_controller");
+
+        setConfigPath();
+        readConfig();
+        generateThrusterForceMatrix(thrusterInfo, com);
     }
 
 
     /*
     Yaml traversal -- get recursed
     */
-    void traversal(int_vector& ints, bool_vector& bools, array_vector& arrays, const YAML::Node& tree, const std::string path){
+    void ControllerOverseer::traversal(int_vector& ints, bool_vector& bools, array_vector& arrays, const YAML::Node& tree, const std::string path){
         switch(tree.Type()){
             case YAML::NodeType::Map:
                 {
@@ -181,12 +86,12 @@ class ControllerOverseer : public rclcpp::Node {
                 }
             case YAML::NodeType::Sequence:{
 
-                std::vector<double> array;
+                std::vector<int64_t> array;
 
                 for(const auto& item : tree){
                     if(item.IsScalar()){
                         try{
-                             changed = item.as<double>()*PARAMETERSCALE;
+                            int64_t changed = item.as<int64_t>()*PARAMETERSCALE;
                             array.push_back(changed);
                         }catch (const YAML::BadConversion& e){
                             RCLCPP_ERROR(get_logger(), "%s not read properly", path.c_str());
@@ -201,15 +106,15 @@ class ControllerOverseer : public rclcpp::Node {
             }
 
             case YAML::NodeType::Scalar:{
-                int num = 0;
+                int64_t num = 0;
                 bool boolean;
                 try{
-                    num = tree.as<double>() * PARAMETERSCALE;
+                    num = tree.as<int64_t>() * PARAMETERSCALE;
                 } catch (const YAML::BadConversion& e){
                     try{
                     boolean = tree.as<bool>();
                     }catch(const YAML::BadConversion& e){
-                        RCLCPP_ERROR(get_logger(), "%s: %s not read properly", path, tree.Tag());
+                        RCLCPP_ERROR(get_logger(), "%s: %s not read properly", path.c_str(), tree.Tag().c_str());
                         break;
                     }
                 }
@@ -236,14 +141,14 @@ class ControllerOverseer : public rclcpp::Node {
     /*
     Read both autoff and regular config files and place information into the simulink class
     */
-    void readConfig(){
+    void ControllerOverseer::readConfig(){
         try{
             configTree = YAML::LoadFile(configPath);
             thrusterInfo = configTree["thrusters"];
-            com = getYamlNodeAs<std::vector<double>>(configTree, {"com"});
+            com = configTree["com"];
 
             baseWrench = getYamlNodeAs<std::vector<double>>(configTree, {"controller", "feed_forward", "base_wrench"});
-            traversal(completeController.intV, completeController.boolV, completeController.arrayV, configTree, "");
+            traversal(completeController->intV, completeController->boolV, completeController->arrayV, configTree, "");
 
             auto thrusterSolverInfo = configTree["thruster_solver"];
             defaultWeight = getYamlNodeAs<double>(thrusterSolverInfo, {"default_weight"});
@@ -260,15 +165,15 @@ class ControllerOverseer : public rclcpp::Node {
             autoffTree = autoffTree["auto_ff"];
             traversal(completeController->intV, completeController->boolV, completeController->arrayV, autoffTree, "controller__autoff__initial_ff");
         }catch(YAML::BadFile &e){
-            RCLCPP_ERROR(get_logger(), "Cannot open config file at %s", autoffconfigPath.c_str());
+            RCLCPP_ERROR(get_logger(), "Cannot open config file at %s", autoffConfigPath.c_str());
         }
 
 
 
     }
 
-    void generateThrusterForceMatrix(const YAML::Node& thrusterInfo, const YAML::Node& com){
-        std::vector<double> thrusterFT;
+    void ControllerOverseer::generateThrusterForceMatrix(const YAML::Node& thrusterInfo, const YAML::Node& com){
+        std::vector<int64_t> thrusterFT;
         std::vector<double> comXYZ = com.as<std::vector<double>>();
 
         int i = 0;
@@ -289,21 +194,21 @@ class ControllerOverseer : public rclcpp::Node {
             v3d momentArm(positionFromCom[0], positionFromCom[1], positionFromCom[2]);
             v3d torque = momentArm.cross(forceVector);
                 
-            thrusterFT.push_back(forceVector(0));
-            thrusterFT.push_back(forceVector(1));
-            thrusterFT.push_back(forceVector(2));
-            thrusterFT.push_back(torque(0));
-            thrusterFT.push_back(torque(1));
-            thrusterFT.push_back(torque(2));
+            thrusterFT.push_back(static_cast<int64_t>(forceVector(0) * PARAMETERSCALE));
+            thrusterFT.push_back(static_cast<int64_t>(forceVector(1) * PARAMETERSCALE));
+            thrusterFT.push_back(static_cast<int64_t>(forceVector(2) * PARAMETERSCALE));
+            thrusterFT.push_back(static_cast<int64_t>(torque(0) * PARAMETERSCALE));
+            thrusterFT.push_back(static_cast<int64_t>(torque(1) * PARAMETERSCALE));
+            thrusterFT.push_back(static_cast<int64_t>(torque(2) * PARAMETERSCALE));
         }
 
         completeController->arrayV.emplace_back("talos_wrenchmat", thrusterFT);
     }
 
-    void setConfigPath(){
+    void ControllerOverseer::setConfigPath(){
         configPath = get_parameter("vehicle_config").as_string();
         if(configPath == ""){
-            string descriptionsShareDir = get_package_share_directory("riptide_descriptions2");
+            string descriptionsShareDir = ament_index_cpp::get_package_share_directory("riptide_descriptions2");
             string robotConfigSubpath = "config/" + robotName + ".yaml";
             
             configPath = descriptionsShareDir + "/" + robotConfigSubpath;
@@ -313,7 +218,7 @@ class ControllerOverseer : public rclcpp::Node {
             string subPath;
 
             while (std::getline(ss, subPath, '/')) {
-                parts.push_back(subPath);
+                dirSplit.push_back(subPath);
             }
             
             bool flag = false;
@@ -345,7 +250,7 @@ class ControllerOverseer : public rclcpp::Node {
             }
         }
 
-        string controlShareDir = get_package_share_directory("riptide_controllers2");
+        string controlShareDir = ament_index_cpp::get_package_share_directory("riptide_controllers2");
         string autoFFSubpath = "config/" + robotName + "_autoff.yaml";
 
         if(fs::exists("/home/ros/colcon_deploy")){
@@ -357,14 +262,14 @@ class ControllerOverseer : public rclcpp::Node {
         }
     }
 
-    void thrusterTelemetryCB(riptide_msgs2::msg::DshotPartialTelemetry::SharedPtr msg){
+    void ControllerOverseer::thrusterTelemetryCB(riptide_msgs2::msg::DshotPartialTelemetry::SharedPtr msg){
         bool adjustWeights = false;
 
-        escPowerCheckTimer.reset();
+        escPowerCheckTimer->reset();
 
-        if(msg.start_thruster_num == 0){
+        if(msg->start_thruster_num == 0){
             int i = 0;
-            for(auto esc : msg.esc_telemetry){
+            for(auto esc : msg->esc_telemetry){
                 if(!esc.thruster_ready && activeThrusters[i] == true){
                     activeThrusters[i] = false;
                     adjustWeights = true;
@@ -375,14 +280,14 @@ class ControllerOverseer : public rclcpp::Node {
                 }
                 i++;
             }
-            if(msg.disabled_flags != 0){
+            if(msg->disabled_flags != 0){
                 escPowerStopsLow++;
             }else{
                 escPowerStopsLow = 0;
             }
         }else{
             int i = 4;
-            for(auto esc : msg.esc_telemetry){
+            for(auto esc : msg->esc_telemetry){
                 if(!esc.thruster_ready && activeThrusters[i] == true){
                     activeThrusters[i] = false;
                     adjustWeights = true;
@@ -393,7 +298,7 @@ class ControllerOverseer : public rclcpp::Node {
                 }
                 i++;
             }
-            if(msg.disabled_flags != 0){
+            if(msg->disabled_flags != 0){
                 escPowerStopsHigh++;
             }else{
                 escPowerStopsHigh = 0;
@@ -418,7 +323,7 @@ class ControllerOverseer : public rclcpp::Node {
 
     }
 
-    void escPowerTimeout(){
+    void ControllerOverseer::escPowerTimeout(){
         if(!enabled){
             RCLCPP_WARN(get_logger(), "Not recieving thruster telemetry!");
         }
@@ -429,21 +334,22 @@ class ControllerOverseer : public rclcpp::Node {
         motionEnabledPub->publish(motionMsg);
     }
 
-    void setThrusterModeCB(std_msgs::msg::Int16::SharedPtr msg){
-        if(msg.data != thrusterMode){
-            thrusterMode = msg.data;
+    void ControllerOverseer::setThrusterModeCB(std_msgs::msg::Int16::SharedPtr msg){
+        if(msg->data != thrusterMode){
+            thrusterMode = msg->data;
             adjustThrusterWeights();
         }
 
     }
     
 
-    void odometryCB(nav_msgs::msg::Odometry::SharedPtr msg){
-        if(!startTime){
+    void ControllerOverseer::odometryCB(nav_msgs::msg::Odometry::SharedPtr msg){
+        if(!startTimeSet){
             startTime = get_clock()->now();
+            startTimeSet = true;
         }
         
-        bool submerged[8] = [false,false,false,false,false,false,false,false];
+        std::array<bool, 8> submerged = {false,false,false,false,false,false,false,false};
         
         double killPlane = getYamlNodeAs<double>(configTree, {"controller_overseer", "thruster_kill_plane"});
 
@@ -451,7 +357,7 @@ class ControllerOverseer : public rclcpp::Node {
         try{
             for(int i = 0; i < 8; i++){
 
-                pos = tfBuffer->lookup_transform("world", tfNamespace + "thruster_" + std::to_string(i), tf2::TimePointZero);
+                pos = tfBuffer->lookupTransform("world", tfNamespace + "thruster_" + std::to_string(i), tf2::TimePointZero);
 
                 if(pos.transform.translation.z < killPlane){
                     submerged[i] = true;
@@ -463,17 +369,17 @@ class ControllerOverseer : public rclcpp::Node {
             }
         }
         catch(const std::exception& ex){
-            if(get_clock().now().to_msg().sec >= 1.0 + startTime.to_msg().sec){
+            if(get_clock()->now().seconds() >= 1.0 + startTime.seconds()){
                 RCLCPP_ERROR(get_logger(), "Thruster position lookup failed with exception %s", ex.what());
             }
         }
     }
 
-    void adjustThrusterWeights(){
+    void ControllerOverseer::adjustThrusterWeights(){
         int activeThrusterCount = 0;
         int submergedThrustersCount = 0;
 
-        for(int i = 0; i<activeThrusters.size(); i++){
+        for(int i = 0; i<8; i++){
             if(activeThrusters[i]){
                 activeThrusterCount++;
 
@@ -490,25 +396,25 @@ class ControllerOverseer : public rclcpp::Node {
 
         if(activeThrusterCount <= 6){
             if(enabled){
-                RCLCPP_ERROR(get_logger(), "System is underactuated. Only: " + std::to_string(activeThrusterCount) + " thrusters are active. Killing thrusters!");
+                RCLCPP_ERROR(get_logger(), "System is underactuated. Only: %s thrusters are active. Killing thrusters!", std::to_string(activeThrusterCount).c_str());
                 enabled = false;
             }else{
                 enabled = true;
             }
         }
 
-        if(submergedThrusters >= 8 && thrusterMode == 2){
+        if(submergedThrustersCount >= 8 && thrusterMode == 2){
             thrusterWeights[4] = lowDowndraftWeight;
             thrusterWeights[5] = lowDowndraftWeight;
         } 
 
         if(thrusterMode == 0){
-            for(int i = 0; i < thrusterWeights.size(); i++){
+            for(int i = 0; i < 8; i++){
                 thrusterWeights[i] = 0;
             }
         }
 
-        geometry_msgs::msg::Int32MultiArray msg;
+        std_msgs::msg::Int32MultiArray msg;
         
         std::vector<int> weights;
         for(const double& weight : thrusterWeights){
@@ -520,16 +426,21 @@ class ControllerOverseer : public rclcpp::Node {
         weightsPub->publish(msg);
     }
 
-    void setTeleop(std_srvs::srv::SetBool::Request::SharedPtr req, std_srvs::srv::SetBool::Response::SharedPtr res){
+    void ControllerOverseer::setTeleopCB(std_srvs::srv::SetBool::Request::SharedPtr req, std_srvs::srv::SetBool::Response::SharedPtr res){
         try{
+            
             ParameterValue pVal;
             pVal.type = ParameterType::PARAMETER_INTEGER_ARRAY;
+            pVal.integer_array_value = getYamlNodeAs<std::vector<int64_t>>(configTree, {"controller", "active_force_control"});
 
             if(req->data){
-                pVal.integer_array_value = [3000000, 3000000, 2000000, 1000000, 1000000, 3000000];
+                //set teleop
+                pVal.integer_array_value[0] = 3000000;
+                pVal.integer_array_value[1] = 3000000;
+                pVal.integer_array_value[5] = 3000000;
+
                 res->message = "Successfully enabled teleop!";
             }else{
-                pVal.integer_array_value = getYamlNodeAs<std::vector<int>>(configTree, {"controller", "active_force_control"});
                 res->message = "Successfully enabled active control!";
             }
 
@@ -537,12 +448,12 @@ class ControllerOverseer : public rclcpp::Node {
             param.value = pVal;
             param.name = "controller__active_force_mask";
 
-            SetParams::Request::SharedPtr setParamsRequest;
-            setParamsRequest->parameters = [param];
+            SetParams::Request::SharedPtr setParamsRequest = std::make_shared<SetParams::Request>();
+            setParamsRequest->parameters = {param};
 
-            completeController->setParamClient.scheduleCall(setParamsRequest, 
-                                                                [this, req](SetParams::Response::SharedPtr res){
-                                                                completeController->setParametersDoneCallback(res);
+            completeController->setParamClient->scheduleCall(setParamsRequest, 
+                                                                [this, setParamsRequest](SetParams::Response::SharedPtr res){
+                                                                completeController->setParametersDoneCallback(res, setParamsRequest);
                                                             });
 
             res->success = true;
@@ -554,21 +465,21 @@ class ControllerOverseer : public rclcpp::Node {
         }
     }
 
-    void doUpdate(){
+    void ControllerOverseer::doUpdate(){
     std::vector<std::string> activeROSNodeNames;
 
     std::vector<std::pair<string, string>> activeROSNodes = get_node_graph_interface()->get_node_names_and_namespaces();
 
-    for (const auto& node : active_rosnodes) {
-        std::string node_name = node.second + "/" + node.first;
+    for (const auto& node : activeROSNodes) {
+        std::string nodeName = node.second + "/" + node.first;
 
         // Remove double leading "//"
-        if (node_name.rfind("//", 0) == 0) { 
-            node_name = node_name.substr(1);
+        if (nodeName.rfind("//", 0) == 0) { 
+            nodeName = nodeName.substr(1);
         }
 
-        active_rosnode_names.push_back(node_name);
-        }
+        activeROSNodeNames.push_back(nodeName);
+    }
 
         completeController->checkIfActive(activeROSNodeNames);
 
@@ -600,15 +511,15 @@ class ControllerOverseer : public rclcpp::Node {
     }
 
     //ASK ABOUT THIS LOGIC JOHN!!!!
-    void ffAutoTuneCB(geometry_msgs::msg::Twist msg){
+    void ControllerOverseer::ffAutoTuneCB(geometry_msgs::msg::Twist::SharedPtr msg){
         if(!writeAutoFF || !completeController->paramsLoaded || autoffConfigPath == ""){
             return;
         }
 
-        std::vector<double> initFF;
+        std::vector<int64_t> initFF;
         if(waitingOnInit){
             bool initFound = false;
-            for(const std::pair<string, std::vector<double>>& pair : array_vector completeController->arrayV){
+            for(const std::pair<string, std::vector<int64_t>>& pair : completeController->arrayV){
                 if(pair.first == "controller__autoff__initial_ff"){
                     initFF = pair.second;
                     initFound = true;
@@ -616,13 +527,14 @@ class ControllerOverseer : public rclcpp::Node {
                 }
             }
 
+
             
-            if(std::abs(initFF[0] - msg.linear.x) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[1] - msg.linear.y) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[2] - msg.linear.z) < AUTOFF_INIT_TOLERANCE 
-                && std::abs(initFF[3] - msg.angular.x) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[4] - msg.angular.y) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[1] - msg.angular.z) < AUTOFF_INIT_TOLERANCE){
+            if(initFound && std::abs(initFF[0] - msg->linear.x) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[1] - msg->linear.y) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[2] - msg->linear.z) < AUTOFF_INIT_TOLERANCE 
+                && std::abs(initFF[3] - msg->angular.x) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[4] - msg->angular.y) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[1] - msg->angular.z) < AUTOFF_INIT_TOLERANCE){
                     
                     waitingOnInit = false;
             } else{
-
+                RCLCPP_WARN(get_logger(), "Init not found or autoff init tolerance not met");
                 std_msgs::msg::Empty emptyMsg;
                 reInitPub->publish(emptyMsg);
             }
@@ -630,9 +542,9 @@ class ControllerOverseer : public rclcpp::Node {
             return;
         }
 
-        if(initFF[0] != msg.linear.x || initFF[1] != msg.linear.y || initFF[2] != msg.linear.z || initFF[3] != msg.angular.x || initFF[4] != msg.angular.y || initFF[5] != msg.angular.z){
+        if(initFF[0] != msg->linear.x || initFF[1] != msg->linear.y || initFF[2] != msg->linear.z || initFF[3] != msg->angular.x || initFF[4] != msg->angular.y || initFF[5] != msg->angular.z){
             string autoFFstr = "autoff: [";
-            for(int i = 0; i<5 i++){
+            for(int i = 0; i<5; i++){
                 autoFFstr += std::to_string(initFF[i]) + ",";
             }
             autoFFstr += std::to_string(initFF[5]) + "]";
@@ -641,7 +553,7 @@ class ControllerOverseer : public rclcpp::Node {
             if(ffconfig.is_open()){
                 ffconfig << autoFFstr;
             }else{
-                RCLCPP_ERROR(get_logger(), "Cannot open ff auto tune file at: %s", autoffconfigPath.c_str());
+                RCLCPP_ERROR(get_logger(), "Cannot open ff auto tune file at: %s", autoffConfigPath.c_str());
             }
             ffconfig.close();
         }
@@ -650,60 +562,15 @@ class ControllerOverseer : public rclcpp::Node {
 
 
 
-    private:
 
-    bool waitingOnInit;
 
-    int escPowerStopsLow, escPowerStopsHigh;
+int main(int argc, char *argv[]){
+    rclcpp::init(argc, argv);
 
-    YAML::Node configTree;
-    YAML::Node autoffTree;
-
-    YAML::Node thrusterInfo;
-    YAML::Node com;
-
-    bool activeThrusters[8];
-    bool submergedThrusters[8];
-    double thrusterWeights[8];
-
-    int thrusterMode;
-
-    string autoffConfigPath = "";
-
-    std::shared_ptr<SimulinkModelClass> completeController;
-
-    rclcpp::Subscriber<riptide_msgs2::msg::DshotPartialTelemetry>::SharedPtr thrusterTelemetry;
-    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr motionEnabledPub;
-    rclcpp::Service<rcl_interfaces::srv::SetParameters>::SharedPtr setThrusterSolverParams;
-
-    rclcpp::Subscriber<std_msgs::msg::Int16>::SharedPtr thrusterMode;
-    rclcpp::Subscriber<nav_msgs::msg::Odometry>::SharedPtr odom;
-    rclcpp::Subscriber<geometry_msgs::msg::Twist>::SharedPtr ffAutoTune;
-    rclcpp::Publisher<std_msgs::msg::Int32MultiArray>::SharedPtr weightsPub;
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr ffPub;
-    rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr reInitPub;
-
-    rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr setTeleop;
-
-    tf2_ros::Buffer::SharedPtr tfBuffer;
-    tf2_ros::TransformListener::SharedPtr tfListener;
-
-    string tfNamespace;
-
-    rclcpp::Time startTime;
-    rclcpp::TimerBase::SharedPtr updateTimer;
-    rclcpp::TimerBase::SharedPtr weightTimer;
-    rclcpp::TimerBase::SharedPtr escPowerCheckTimer;
-
-    bool enabled;
-    bool publishingFF;
-
-    std::vector<double> baseWrench;
-
-    double defaultWeight, surfaceWeight, disabledWeight, lowDowndraftWeight;
-
-    //parameters
-    string robotName, configPath, thrusterSolverName;
-    bool writeAutoFF;
-
-};
+    std::shared_ptr<ControllerOverseer> node = std::make_shared<ControllerOverseer>();
+    node->init(node);
+    
+    rclcpp::spin(node);
+    rclcpp::shutdown();
+    return 0;
+}
