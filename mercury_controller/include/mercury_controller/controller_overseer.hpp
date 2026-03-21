@@ -70,6 +70,7 @@ class ControllerOverseer : public rclcpp::Node {
 
     public:
 
+    //constructor
     ControllerOverseer();
 
     //construct the complete controller class using the pointer for "this" instance
@@ -86,80 +87,120 @@ class ControllerOverseer : public rclcpp::Node {
     */
     void readConfig();
 
+    /*
+    From thruster and com portions of yaml file, set wrench matrix based on thruster positions.
+    */
     void generateThrusterForceMatrix(const YAML::Node& thrusterInfo, const YAML::Node& com);
 
+    /*
+    Set yaml file config paths, right now this is just talos.yaml and talos_autoff.yaml; this will change
+     */
     void setConfigPath();
 
+    /*
+    Callback from thruster telemetry subscriber, checks that thrusters are still working
+    */
     void thrusterTelemetryCB(riptide_msgs2::msg::DshotPartialTelemetry::SharedPtr msg);
 
+    /*
+    Timer callback that checks if esc boards are publishing
+    */
     void escPowerTimeout();
 
+    /*
+    Callback that adjusts thruster weights if thruster mode changes (low downdraft or normal)
+    */
     void setThrusterModeCB(std_msgs::msg::Int16::SharedPtr msg);
     
-
+    /*
+    Callback to odometry subscriber, adjusts thruster weights if any thrusters are no longer submerged
+    */
     void odometryCB(nav_msgs::msg::Odometry::SharedPtr msg);
 
+    /*
+    Checks that enough thrusters are working and adjusts weights based on if they are surfaced or if in low downdraft mode
+    */
     void adjustThrusterWeights();
 
+    /*
+    Set teleop service callback that sets controller mask based off yaml file and if teleop mode is on.
+    */
     void setTeleopCB(std_srvs::srv::SetBool::Request::SharedPtr req, std_srvs::srv::SetBool::Response::SharedPtr res);
 
+    /*
+    1 second timer callback that lists and sets model parameters if model is active and publishes feed forward message
+    */
     void doUpdate();
 
-    //ASK ABOUT THIS LOGIC JOHN!!!!
+    /*
+    Rewrite to auto tune yaml file if it has changed    
+    */
     void ffAutoTuneCB(geometry_msgs::msg::Twist::SharedPtr msg);
 
 
+    //true if waiting on autoff initialization
     bool waitingOnInit;
 
+    //thruster status information
     int escPowerStopsLow, escPowerStopsHigh;
-
-    YAML::Node configTree;
-    YAML::Node autoffTree;
-
-    YAML::Node thrusterInfo;
-    YAML::Node com;
-
     std::array<bool, 8> activeThrusters;
     std::array<bool, 8> submergedThrusters;
     std::array<double, 8> thrusterWeights;
 
+    //yaml trees
+    YAML::Node configTree;
+    YAML::Node autoffTree;
+    YAML::Node thrusterInfo;
+    YAML::Node com;
 
+    //thruster mode, 0: normal, 1: low downdraft
     int thrusterMode = 0;
 
+    //path to autoff config yaml file
     string autoffConfigPath = "";
 
+    //pointer to simulink model class which calls set and list params services
     std::shared_ptr<SimulinkModelClass> completeController;
 
+    //thruster info publishers and subscribers
     rclcpp::Subscription<riptide_msgs2::msg::DshotPartialTelemetry>::SharedPtr thrusterTelemetry;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr motionEnabledPub;
-    rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr setThrusterSolverParams;
-
     rclcpp::Subscription<std_msgs::msg::Int16>::SharedPtr thrusterModeSub;
+    rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr setThrusterSolverParams;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom;
-    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr ffAutoTune;
     rclcpp::Publisher<std_msgs::msg::Int32MultiArray>::SharedPtr weightsPub;
+
+    //feed forward publishersand subscribers
+    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr ffAutoTune;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr ffPub;
     rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr reInitPub;
 
+    //sets active control mode
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr setTeleop;
 
+    //tf2 buffer and transform listener for thruster matrix generation
     std::unique_ptr<tf2_ros::Buffer> tfBuffer;          //unique ptr because that's how ROS documentation has it
     std::shared_ptr<tf2_ros::TransformListener> tfListener;
-
     string tfNamespace;
 
+    //time that odometry msgs began flooding in
     rclcpp::Time startTime;
     bool startTimeSet = false;
 
+    //timers for doUpdate, adjustThrusterWeights, and escPowerTimeouts
     rclcpp::TimerBase::SharedPtr updateTimer;
     rclcpp::TimerBase::SharedPtr weightTimer;
     rclcpp::TimerBase::SharedPtr escPowerCheckTimer;
 
+    //bool for if still fully acutated, and if feed forward is being pubilshed
     bool enabled;
     bool publishingFF;
 
+    //base feed forward wrench and current initial feed forward
     std::vector<double> baseWrench;
+    std::vector<double> currentInitFF;
 
+   //different weight values for thrusters 
     double defaultWeight, surfaceWeight, disabledWeight, lowDowndraftWeight;
 
     //parameters

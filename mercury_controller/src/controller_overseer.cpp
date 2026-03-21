@@ -1,4 +1,3 @@
-
 #include "controller_overseer.hpp"
 
 
@@ -51,6 +50,7 @@
         using namespace std::chrono_literals;
         updateTimer = create_wall_timer(1s, std::bind(&ControllerOverseer::doUpdate, this));
         weightTimer = create_wall_timer(1s, std::bind(&ControllerOverseer::adjustThrusterWeights, this)); 
+        escPowerCheckTimer = create_wall_timer(2s, std::bind(&ControllerOverseer::escPowerTimeout, this));
 
     }
 
@@ -162,6 +162,7 @@
 
         try{
             autoffTree = YAML::LoadFile(autoffConfigPath);
+            currentInitFF = getYamlNodeAs<std::vector<double>>(autoffTree, {"auto_ff"});
             autoffTree = autoffTree["auto_ff"];
             traversal(completeController->intV, completeController->boolV, completeController->arrayV, autoffTree, "controller__autoff__initial_ff");
         }catch(YAML::BadFile &e){
@@ -466,49 +467,49 @@
     }
 
     void ControllerOverseer::doUpdate(){
-    std::vector<std::string> activeROSNodeNames;
+        std::vector<std::string> activeROSNodeNames;
 
-    std::vector<std::pair<string, string>> activeROSNodes = get_node_graph_interface()->get_node_names_and_namespaces();
+        std::vector<std::pair<string, string>> activeROSNodes = get_node_graph_interface()->get_node_names_and_namespaces();
 
-    for (const auto& node : activeROSNodes) {
-        std::string nodeName = node.second + "/" + node.first;
+        for (const auto& node : activeROSNodes) {
+            std::string nodeName = node.second + "/" + node.first;
 
-        // Remove double leading "//"
-        if (nodeName.rfind("//", 0) == 0) { 
-            nodeName = nodeName.substr(1);
+            // Remove double leading "//"
+            if (nodeName.rfind("//", 0) == 0) { 
+                nodeName = nodeName.substr(1);
+            }
+
+            activeROSNodeNames.push_back(nodeName);
         }
 
-        activeROSNodeNames.push_back(nodeName);
-    }
+            completeController->checkIfActive(activeROSNodeNames);
 
-        completeController->checkIfActive(activeROSNodeNames);
+            if(!get_parameter(FF_PUBLISH_PARAM).as_bool()){
+                publishingFF = true;
 
-        if(!get_parameter(FF_PUBLISH_PARAM).as_bool()){
-            publishingFF = true;
+                geometry_msgs::msg::Twist msg;
+                msg.linear.x = baseWrench[0];
+                msg.linear.y = baseWrench[1];
+                msg.linear.z = baseWrench[2];
+                msg.angular.x = baseWrench[3];
+                msg.angular.y = baseWrench[4];
+                msg.angular.z = baseWrench[5];
 
-            geometry_msgs::msg::Twist msg;
-            msg.linear.x = baseWrench[0];
-            msg.linear.y = baseWrench[1];
-            msg.linear.z = baseWrench[2];
-            msg.angular.x = baseWrench[3];
-            msg.angular.y = baseWrench[4];
-            msg.angular.z = baseWrench[5];
+                ffPub->publish(msg);
+            }else if(publishingFF){
 
-            ffPub->publish(msg);
-        }else if(publishingFF){
+                publishingFF = false;
+                geometry_msgs::msg::Twist msg;
+                msg.linear.x = 0.0;
+                msg.linear.y = 0.0;
+                msg.linear.z = 0.0;
+                msg.angular.x = 0.0;
+                msg.angular.y = 0.0;
+                msg.angular.z = 0.0;
 
-            publishingFF = false;
-            geometry_msgs::msg::Twist msg;
-            msg.linear.x = 0.0;
-            msg.linear.y = 0.0;
-            msg.linear.z = 0.0;
-            msg.angular.x = 0.0;
-            msg.angular.y = 0.0;
-            msg.angular.z = 0.0;
-
-            ffPub->publish(msg);
+                ffPub->publish(msg);
+            }
         }
-    }
 
     //ASK ABOUT THIS LOGIC JOHN!!!!
     void ControllerOverseer::ffAutoTuneCB(geometry_msgs::msg::Twist::SharedPtr msg){
@@ -542,12 +543,9 @@
             return;
         }
 
-        if(initFF[0] != msg->linear.x || initFF[1] != msg->linear.y || initFF[2] != msg->linear.z || initFF[3] != msg->angular.x || initFF[4] != msg->angular.y || initFF[5] != msg->angular.z){
-            string autoFFstr = "autoff: [";
-            for(int i = 0; i<5; i++){
-                autoFFstr += std::to_string(initFF[i]) + ",";
-            }
-            autoFFstr += std::to_string(initFF[5]) + "]";
+        if(currentInitFF[0] != msg->linear.x || currentInitFF[1] != msg->linear.y || currentInitFF[2] != msg->linear.z || currentInitFF[3] != msg->angular.x || currentInitFF[4] != msg->angular.y || currentInitFF[5] != msg->angular.z){
+            
+            string autoFFstr = "autoff: [" + std::to_string(msg->linear.x) + "," + std::to_string(msg->linear.y) + "," + std::to_string(msg->linear.z) + "," + std::to_string(msg->angular.x) + "," + std::to_string(msg->angular.y) + "," + std::to_string(msg->angular.z) + "]\n";    
             
             std::ofstream ffconfig(autoffConfigPath);
             if(ffconfig.is_open()){
