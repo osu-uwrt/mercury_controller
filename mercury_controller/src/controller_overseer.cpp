@@ -16,7 +16,7 @@
         declare_parameter("write_ff_autotune", true);
         writeAutoFF = get_parameter("write_ff_autotune").as_bool();
 
-        declare_parameter(FF_PUBLISH_PARAM, false);
+        declare_parameter("disable_native_ff", false);
 
 
         //set thruster info
@@ -292,13 +292,16 @@
 
 
     void ControllerOverseer::thrusterTelemetryCB(mercury_msgs::msg::DshotPartialTelemetry::SharedPtr msg){
-        bool adjustWeights = false;
-
+        //reset power check timer
         escPowerCheckTimer->reset();
 
+        //check if activeThrusters matches the thruster telemetry message
+        //messages come in thruster groups of 4, either 0-3 or 4-7.
+        bool adjustWeights = false;
         if(msg->start_thruster_num == 0){
             int i = 0;
             for(auto esc : msg->esc_telemetry){
+                //if mismatch, call adjust thruster weights
                 if(!esc.thruster_ready && activeThrusters[i] == true){
                     activeThrusters[i] = false;
                     adjustWeights = true;
@@ -309,6 +312,7 @@
                 }
                 i++;
             }
+            //if a thruster is down, add to power stops
             if(msg->disabled_flags != 0){
                 escPowerStopsLow++;
             }else{
@@ -317,16 +321,18 @@
         }else{
             int i = 4;
             for(auto esc : msg->esc_telemetry){
-                if(!esc.thruster_ready && activeThrusters[i] == true){
+                //if mismatch, call adjust thruster weights
+                if(!esc.thruster_ready && activeThrusters[i]){
                     activeThrusters[i] = false;
                     adjustWeights = true;
 
-                }else if(esc.thruster_ready && activeThrusters[i] == false){
+                }else if(esc.thruster_ready && !activeThrusters[i]){
                     activeThrusters[i] = true;
                     adjustWeights = true;
                 }
                 i++;
             }
+            //if a thruster is down, add to power stops
             if(msg->disabled_flags != 0){
                 escPowerStopsHigh++;
             }else{
@@ -338,8 +344,8 @@
             adjustThrusterWeights();
         }
         
+        //publish if motion is enabled
         std_msgs::msg::Bool motionMsg;
-
         if(escPowerStopsLow > ESC_POWER_STOP_TOLERANCE || escPowerStopsHigh > ESC_POWER_STOP_TOLERANCE){
             motionMsg.data = false;
             enabled =false;
@@ -352,11 +358,14 @@
 
     }
 
+    //This will only be called if thruster telemetry hasn't received a message in 2 seconds
     void ControllerOverseer::escPowerTimeout(){
-        if(!enabled){
+        //if we are running and this timer runs out, print warn message
+        if(enabled){
             RCLCPP_WARN(get_logger(), "Not recieving thruster telemetry!");
         }
 
+        //publish false motion message
         std_msgs::msg::Bool motionMsg;
         motionMsg.data = false;
         enabled = false;
@@ -368,30 +377,29 @@
             thrusterMode = msg->data;
             adjustThrusterWeights();
         }
-
     }
     
 
     void ControllerOverseer::odometryCB(nav_msgs::msg::Odometry::SharedPtr msg){
+        //start time if needed
         if(!startTimeSet){
             startTime = get_clock()->now();
             startTimeSet = true;
         }
-        
+
         std::array<bool, 8> submerged = {false,false,false,false,false,false,false,false};
-        
         double killPlane = getYamlNodeAs<double>(controllerTree, {"controller_overseer", "thruster_kill_plane"});
 
         geometry_msgs::msg::TransformStamped pos;
         try{
             for(int i = 0; i < 8; i++){
-
+                //if thruster above water, set submerged to true
                 pos = tfBuffer->lookupTransform("world", tfNamespace + "thruster_" + std::to_string(i), tf2::TimePointZero);
-
                 if(pos.transform.translation.z < killPlane){
                     submerged[i] = true;
                 }
             }
+            //if the amount of submerged thrusters has changed, adjust thruster weights
             if(submerged != submergedThrusters){
                 submergedThrusters = submerged;
                 adjustThrusterWeights();
@@ -408,6 +416,7 @@
         int activeThrusterCount = 0;
         int submergedThrustersCount = 0;
 
+        //count amount of active thrusters and submerged thrusters and set weights
         for(int i = 0; i<8; i++){
             if(activeThrusters[i]){
                 activeThrusterCount++;
@@ -423,6 +432,7 @@
             }
         }
 
+        //if underactuated, disable robot
         if(activeThrusterCount <= 6){
             if(enabled){
                 RCLCPP_ERROR(get_logger(), "System is underactuated. Only: %s thrusters are active. Killing thrusters!", std::to_string(activeThrusterCount).c_str());
@@ -432,32 +442,33 @@
             }
         }
 
+        //set low downdraft mode
         if(submergedThrustersCount >= 8 && thrusterMode == 2){
+            //THIS IS FOR TALOS NEEDS TO CHANGE!
             thrusterWeights[4] = lowDowndraftWeight;
             thrusterWeights[5] = lowDowndraftWeight;
         } 
 
+        //disable thrusters if no mode set
         if(thrusterMode == 0){
             for(int i = 0; i < 8; i++){
                 thrusterWeights[i] = 0;
             }
         }
 
+        //publish weights
         std_msgs::msg::Int32MultiArray msg;
-        
         std::vector<int> weights;
         for(const double& weight : thrusterWeights){
             weights.push_back(weight);
         }
-
         msg.data = weights;
-
         weightsPub->publish(msg);
     }
 
     void ControllerOverseer::setTeleopCB(std_srvs::srv::SetBool::Request::SharedPtr req, std_srvs::srv::SetBool::Response::SharedPtr res){
         try{
-            
+            //set control mask based off yaml
             ParameterValue pVal;
             pVal.type = ParameterType::PARAMETER_INTEGER_ARRAY;
             pVal.integer_array_value = getYamlNodeAs<std::vector<int64_t>>(controllerTree, {"controller", "active_force_control"});
@@ -472,21 +483,20 @@
             }else{
                 res->message = "Successfully enabled active control!";
             }
-
+            //create the parameter
             Parameter param;
             param.value = pVal;
             param.name = "controller__active_force_mask";
-
+        
+            //set the parameter using the setParamClient
             SetParams::Request::SharedPtr setParamsRequest = std::make_shared<SetParams::Request>();
             setParamsRequest->parameters = {param};
-
             completeController->setParamClient->scheduleCall(setParamsRequest, 
                                                                 [this, setParamsRequest](SetParams::Response::SharedPtr res){
                                                                 completeController->setParametersDoneCallback(res, setParamsRequest);
                                                             });
-
             res->success = true;
-                
+
         }catch(std::exception &e){
             RCLCPP_WARN(get_logger(), "Failed to initialize active control, model may not be started");
             res->success = false;
@@ -495,72 +505,66 @@
     }
 
     void ControllerOverseer::doUpdate(){
+
         std::vector<std::string> activeROSNodeNames;
 
         std::vector<std::pair<string, string>> activeROSNodes = get_node_graph_interface()->get_node_names_and_namespaces();
 
+        //create vector of all active ros nodes
         for (const auto& node : activeROSNodes) {
-            std::string nodeName = node.second + "/" + node.first;
-
+            string nodeName = node.second + "/" + node.first;
             // Remove double leading "//"
             if (nodeName.rfind("//", 0) == 0) { 
                 nodeName = nodeName.substr(1);
             }
-
             activeROSNodeNames.push_back(nodeName);
         }
+        //check if complete controller node is active
+        completeController->checkIfActive(activeROSNodeNames);
 
-            completeController->checkIfActive(activeROSNodeNames);
+        //publish FF if necessary
+        if(!get_parameter("disable_native_ff").as_bool()){
+            publishingFF = true;
 
-            if(!get_parameter(FF_PUBLISH_PARAM).as_bool()){
-                publishingFF = true;
+            geometry_msgs::msg::Twist msg;
+            msg.linear.x = baseWrench[0];
+            msg.linear.y = baseWrench[1];
+            msg.linear.z = baseWrench[2];
+            msg.angular.x = baseWrench[3];
+            msg.angular.y = baseWrench[4];
+            msg.angular.z = baseWrench[5];
 
-                geometry_msgs::msg::Twist msg;
-                msg.linear.x = baseWrench[0];
-                msg.linear.y = baseWrench[1];
-                msg.linear.z = baseWrench[2];
-                msg.angular.x = baseWrench[3];
-                msg.angular.y = baseWrench[4];
-                msg.angular.z = baseWrench[5];
+            ffPub->publish(msg);
+        
+        //reset if needed
+        }else if(publishingFF){
 
-                ffPub->publish(msg);
-            }else if(publishingFF){
+            publishingFF = false;
+            geometry_msgs::msg::Twist msg;
+            msg.linear.x = 0.0;
+            msg.linear.y = 0.0;
+            msg.linear.z = 0.0;
+            msg.angular.x = 0.0;
+            msg.angular.y = 0.0;
+            msg.angular.z = 0.0;
 
-                publishingFF = false;
-                geometry_msgs::msg::Twist msg;
-                msg.linear.x = 0.0;
-                msg.linear.y = 0.0;
-                msg.linear.z = 0.0;
-                msg.angular.x = 0.0;
-                msg.angular.y = 0.0;
-                msg.angular.z = 0.0;
-
-                ffPub->publish(msg);
-            }
+            ffPub->publish(msg);
         }
+    }
 
-    //ASK ABOUT THIS LOGIC JOHN!!!!
     void ControllerOverseer::ffAutoTuneCB(geometry_msgs::msg::Twist::SharedPtr msg){
+        //if overseer not ready, break
         if(!writeAutoFF || !completeController->paramsLoaded || autoffConfigPath == ""){
             return;
         }
-
-        std::vector<int64_t> initFF;
+        //find initial ff
         if(waitingOnInit){
             bool initFound = false;
-            for(const std::pair<string, std::vector<int64_t>>& pair : completeController->arrayV){
-                if(pair.first == "controller__autoff__initial_ff"){
-                    initFF = pair.second;
-                    initFound = true;
-                    break;
-                }
-            }
+            std::vector<double> initFF = getYamlNodeAs<std::vector<double>>(controllerTree, {"controller", "autoff", "initial_ff"});
 
-
-            
+            //if init is found and autoff tolerance is met, waiting on init is false
             if(initFound && std::abs(initFF[0] - msg->linear.x) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[1] - msg->linear.y) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[2] - msg->linear.z) < AUTOFF_INIT_TOLERANCE 
-                && std::abs(initFF[3] - msg->angular.x) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[4] - msg->angular.y) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[1] - msg->angular.z) < AUTOFF_INIT_TOLERANCE){
-                    
+                && std::abs(initFF[3] - msg->angular.x) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[4] - msg->angular.y) < AUTOFF_INIT_TOLERANCE && std::abs(initFF[1] - msg->angular.z) < AUTOFF_INIT_TOLERANCE){           
                     waitingOnInit = false;
             } else{
                 RCLCPP_WARN(get_logger(), "Init not found or autoff init tolerance not met");
@@ -571,8 +575,8 @@
             return;
         }
 
+        //if auto tune ff has changed, rewrite to autoff config file
         if(currentInitFF[0] != msg->linear.x || currentInitFF[1] != msg->linear.y || currentInitFF[2] != msg->linear.z || currentInitFF[3] != msg->angular.x || currentInitFF[4] != msg->angular.y || currentInitFF[5] != msg->angular.z){
-            
             string autoFFstr = "autoff: [" + std::to_string(msg->linear.x) + "," + std::to_string(msg->linear.y) + "," + std::to_string(msg->linear.z) + "," + std::to_string(msg->angular.x) + "," + std::to_string(msg->angular.y) + "," + std::to_string(msg->angular.z) + "]\n";    
             
             std::ofstream ffconfig(autoffConfigPath);

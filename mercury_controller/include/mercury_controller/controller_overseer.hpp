@@ -1,3 +1,4 @@
+#pragma once
 
 #include <rclcpp/rclcpp.hpp>
 #include <rcl_interfaces/srv/set_parameters.hpp>
@@ -16,7 +17,7 @@
 
 #include <std_srvs/srv/set_bool.hpp>
 
-#include <riptide_msgs2/msg/dshot_partial_telemetry.hpp>
+#include <mercury_msgs/msg/dshot_partial_telemetry.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include <tf2/time.h>
@@ -43,7 +44,6 @@
 #include "overseer_util.hpp"
 
 
-#define FF_PUBLISH_PARAM "disable_native_ff"
 #define PARAMETERSCALE 1000000
 #define AUTOFF_INIT_TOLERANCE .01
 #define ESC_POWER_STOP_TOLERANCE 2
@@ -100,10 +100,11 @@ class ControllerOverseer : public rclcpp::Node {
     /*
     Callback from thruster telemetry subscriber, checks that thrusters are still working
     */
-    void thrusterTelemetryCB(riptide_msgs2::msg::DshotPartialTelemetry::SharedPtr msg);
+    void thrusterTelemetryCB(mercury_msgs::msg::DshotPartialTelemetry::SharedPtr msg);
 
     /*
     Timer callback that checks if esc boards are publishing
+    This is ONLY called if the thruster telemetry subscriber hasn't recieved a message in 2 seconds
     */
     void escPowerTimeout();
 
@@ -166,7 +167,7 @@ class ControllerOverseer : public rclcpp::Node {
     std::shared_ptr<SimulinkModelClass> completeController;
 
     //thruster info publishers and subscribers
-    rclcpp::Subscription<riptide_msgs2::msg::DshotPartialTelemetry>::SharedPtr thrusterTelemetry;
+    rclcpp::Subscription<mercury_msgs::msg::DshotPartialTelemetry>::SharedPtr thrusterTelemetry;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr motionEnabledPub;
     rclcpp::Subscription<std_msgs::msg::Int16>::SharedPtr thrusterModeSub;
     rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr setThrusterSolverParams;

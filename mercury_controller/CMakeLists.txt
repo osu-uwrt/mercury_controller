@@ -11,7 +11,7 @@ find_package(rclcpp REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(rclpy REQUIRED)
-find_package(riptide_msgs2 REQUIRED)
+find_package(mercury_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -43,7 +43,7 @@ ament_target_dependencies(controller_overseer
   tf2
   tf2_ros
   std_srvs
-  riptide_msgs2
+  mercury_msgs
   Eigen3
   yaml-cpp
 )
