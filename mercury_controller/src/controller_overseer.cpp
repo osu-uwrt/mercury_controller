@@ -19,7 +19,7 @@
         declare_parameter(FF_PUBLISH_PARAM, false);
 
 
-
+        //set thruster info
         for(int i = 0; i < 8; i++){
             activeThrusters[i] = true;
             submergedThrusters[i] = true;
@@ -29,43 +29,48 @@
 
         using std::placeholders::_1,std::placeholders::_2;
 
-        thrusterTelemetry = create_subscription<riptide_msgs2::msg::DshotPartialTelemetry>("/state/thrusters/telemetry", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::thrusterTelemetryCB, this, _1));        
+    //Pulishers, Subscribers, Services
+        //thruster info
+        thrusterTelemetry = create_subscription<mercury_msgs::msg::DshotPartialTelemetry>("/state/thrusters/telemetry", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::thrusterTelemetryCB, this, _1));        
         setThrusterSolverParams = create_client<rcl_interfaces::srv::SetParameters>(thrusterSolverName + "/set_parameters");
-
-        motionEnabledPub = create_publisher<std_msgs::msg::Bool>("controller/motion_enabled", rclcpp::SystemDefaultsQoS());
         thrusterModeSub = create_subscription<std_msgs::msg::Int16>("thrusterSolver/thrusterState", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::setThrusterModeCB, this, _1));
         odom = create_subscription<nav_msgs::msg::Odometry>("odometry/filtered", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::odometryCB, this, _1));
-        ffAutoTune = create_subscription<geometry_msgs::msg::Twist>("ff_auto_tune", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::ffAutoTuneCB, this, _1));
+        motionEnabledPub = create_publisher<std_msgs::msg::Bool>("controller/motion_enabled", rclcpp::SystemDefaultsQoS());
         weightsPub = create_publisher<std_msgs::msg::Int32MultiArray>("controller/solver_weights", rclcpp::SystemDefaultsQoS());
+
+        //feed forward
+        ffAutoTune = create_subscription<geometry_msgs::msg::Twist>("ff_auto_tune", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::ffAutoTuneCB, this, _1));
         ffPub = create_publisher<geometry_msgs::msg::Twist>("controller/FF_body_force", rclcpp::SystemDefaultsQoS());
         reInitPub = create_publisher<std_msgs::msg::Empty>("controller/re_init_accumulators", rclcpp::SystemDefaultsQoS());
 
+        //set control mode
         setTeleop = create_service<std_srvs::srv::SetBool>("setTeleop", std::bind(&ControllerOverseer::setTeleopCB, this, _1, _2));
 
+        //tf2 info for thruster matrix
         tfBuffer = std::make_unique<tf2_ros::Buffer>(get_clock());
         tfListener = std::make_shared<tf2_ros::TransformListener>(*tfBuffer);
-
         tfNamespace = get_parameter("robot").as_string();
 
         using namespace std::chrono_literals;
+        //timers to check thruster status
         updateTimer = create_wall_timer(1s, std::bind(&ControllerOverseer::doUpdate, this));
         weightTimer = create_wall_timer(1s, std::bind(&ControllerOverseer::adjustThrusterWeights, this)); 
         escPowerCheckTimer = create_wall_timer(2s, std::bind(&ControllerOverseer::escPowerTimeout, this));
 
     }
 
-    //construct the complete controller class using the pointer for "this" instance
+    //construct the complete controller class using the pointer for "this" instance, then perform initializtion functions
     void ControllerOverseer::init(std::shared_ptr<ControllerOverseer> node){
         completeController = std::make_shared<SimulinkModelClass>(node, "complete_controller");
 
         setConfigPath();
         readConfig();
-        generateThrusterForceMatrix(thrusterInfo, com);
+        generateThrusterForceMatrix();
     }
 
 
     /*
-    Yaml traversal -- get recursed
+    Yaml traversal, places all info into necessary 
     */
     void ControllerOverseer::traversal(int_vector& ints, bool_vector& bools, array_vector& arrays, const YAML::Node& tree, const std::string path){
         switch(tree.Type()){
@@ -138,19 +143,93 @@
 
     }
 
+    void ControllerOverseer::setConfigPath(){
+        configPath = get_parameter("vehicle_config").as_string();
+
+        //set configPath
+        if(configPath == ""){
+            string descriptionsShareDir = ament_index_cpp::get_package_share_directory("mercury_descriptions");
+            string robotConfigSubpath = robotName +"/config/" + robotName; //the rest of the path is hard-coded in readConfig
+            
+            configPath = descriptionsShareDir + "/" + robotConfigSubpath;
+            
+            //split the path into all subpaths
+            std::vector<string> dirSplit;
+            std::stringstream ss(configPath);
+            string subPath;
+
+            while (std::getline(ss, subPath, '/')) {
+                dirSplit.push_back(subPath);
+            }
+            
+            //if in the install directory, change configPath to point to src
+            bool flag = false;
+            for (const string& i : dirSplit) {
+                if(i == "install"){
+                    flag = true;
+                    break;
+                }        
+            }
+            if(flag){
+                string colconRoot = "";
+                int i = 0;
+                //take out install from path and add source
+                while(dirSplit[i] != "install"){
+                    colconRoot += "/" + dirSplit[i];
+                    i++;
+                }
+                colconRoot += "/src";
+                
+                
+                std::vector<string> possiblePaths;
+                possiblePaths.push_back(colconRoot + "/mercury_common/mercury_descriptions/" + robotConfigSubpath);
+                possiblePaths.push_back(colconRoot + "/mercury_descriptions/" + robotConfigSubpath);
+
+                //set config path to existing src directory
+                for(const string& path : possiblePaths){
+                    if(fs::exists(path)){
+                        configPath = path;
+                        RCLCPP_INFO(get_logger(), "Discovered source directory, overriding descriptions to use %s", configPath.c_str());
+                    }
+                }
+            }
+        }
+
+        //find autoff config
+        string controlShareDir = ament_index_cpp::get_package_share_directory("mercury_controller");
+        string autoFFSubpath = "config/" + robotName + "_autoff.yaml";
+
+        //check if running on orin or not, set autoffConfig accordingly
+        if(fs::exists("/home/ros/colcon_deploy")){
+            RCLCPP_INFO(get_logger(), "I think I am NOT running on the orin!");
+            autoffConfigPath = controlShareDir + autoFFSubpath;
+        }else{
+            RCLCPP_INFO(get_logger(), "I think I am running on the orin!");
+            autoffConfigPath = "/bin" + robotName + "_autoff.yaml";     //this will need to change it is no longer /bin
+        }
+    }
+
     /*
     Read both autoff and regular config files and place information into the simulink class
     */
     void ControllerOverseer::readConfig(){
         try{
-            configTree = YAML::LoadFile(configPath);
-            thrusterInfo = configTree["thrusters"];
-            com = configTree["com"];
+            //load controller tree
+            controllerTree = YAML::LoadFile(configPath + "_controller.yaml");
 
-            baseWrench = getYamlNodeAs<std::vector<double>>(configTree, {"controller", "feed_forward", "base_wrench"});
+            //load thruster info, and com
+            YAML::Node xacroTree = YAML::LoadFile(configPath + "_xacro_frames.yaml");
+            thrusterInfo = xacroTree["thrusters"];
+            YAML::Node configTree = YAML::LoadFile(configPath + ".yaml");
+            com = configTree["com"].as<std::vector<double>>();
+
+            //set base wrench and add all parameters from yaml file into completeController
+            baseWrench = getYamlNodeAs<std::vector<double>>(controllerTree, {"feed_forward", "base_wrench"});
             traversal(completeController->intV, completeController->boolV, completeController->arrayV, configTree, "");
+            traversal(completeController->intV, completeController->boolV, completeController->arrayV, controllerTree, "controller__");
 
-            auto thrusterSolverInfo = configTree["thruster_solver"];
+            //save thruster solver information
+            auto thrusterSolverInfo = controllerTree["thruster_solver"];
             defaultWeight = getYamlNodeAs<double>(thrusterSolverInfo, {"default_weight"});
             surfaceWeight = getYamlNodeAs<double>(thrusterSolverInfo, {"surfaced_weight"});
             disabledWeight = getYamlNodeAs<double>(thrusterSolverInfo, {"disable_weight"});
@@ -161,6 +240,7 @@
         }
 
         try{
+            //load autoff yaml file
             autoffTree = YAML::LoadFile(autoffConfigPath);
             currentInitFF = getYamlNodeAs<std::vector<double>>(autoffTree, {"auto_ff"});
             autoffTree = autoffTree["auto_ff"];
@@ -173,28 +253,31 @@
 
     }
 
-    void ControllerOverseer::generateThrusterForceMatrix(const YAML::Node& thrusterInfo, const YAML::Node& com){
+    void ControllerOverseer::generateThrusterForceMatrix(){
         std::vector<int64_t> thrusterFT;
-        std::vector<double> comXYZ = com.as<std::vector<double>>();
-
         int i = 0;
+        //set thruster force torque vector as (Fx, Fy, Fz, Tx, Ty, Tz)
         for(const auto& thruster : thrusterInfo){
             std::vector<double> thrusterPose = getYamlNodeAs<std::vector<double>>(thruster, {"pose"});
+            //make 3d matrix of each axis angled
             m3d R = 
                     Eigen::AngleAxisd(thrusterPose[5],   Eigen::Vector3d::UnitZ()).toRotationMatrix() *
                     Eigen::AngleAxisd(thrusterPose[4], Eigen::Vector3d::UnitY()).toRotationMatrix() *
                     Eigen::AngleAxisd(thrusterPose[3],  Eigen::Vector3d::UnitX()).toRotationMatrix();
 
+            //force vector is just that matrix left multiplied by the x direction
             v3d forceVector = R * Eigen::Vector3d::UnitX(); 
 
             std::vector<double> positionFromCom;
             for(int j = 0; j<3; j++){
-                positionFromCom.push_back(thrusterPose[j] - comXYZ[j]);
+                positionFromCom.push_back(thrusterPose[j] - com[j]);
             }
-                
+            
+            //torque = momentArm x forceVector (cross multiply)
             v3d momentArm(positionFromCom[0], positionFromCom[1], positionFromCom[2]);
             v3d torque = momentArm.cross(forceVector);
                 
+            //multiply all by parameter scale so they can be set as parameters
             thrusterFT.push_back(static_cast<int64_t>(forceVector(0) * PARAMETERSCALE));
             thrusterFT.push_back(static_cast<int64_t>(forceVector(1) * PARAMETERSCALE));
             thrusterFT.push_back(static_cast<int64_t>(forceVector(2) * PARAMETERSCALE));
@@ -203,67 +286,12 @@
             thrusterFT.push_back(static_cast<int64_t>(torque(2) * PARAMETERSCALE));
         }
 
-        completeController->arrayV.emplace_back("talos_wrenchmat", thrusterFT);
+        completeController->arrayV.emplace_back(robotName + "_wrenchmat", thrusterFT);
     }
 
-    void ControllerOverseer::setConfigPath(){
-        configPath = get_parameter("vehicle_config").as_string();
-        if(configPath == ""){
-            string descriptionsShareDir = ament_index_cpp::get_package_share_directory("riptide_descriptions2");
-            string robotConfigSubpath = "config/" + robotName + ".yaml";
-            
-            configPath = descriptionsShareDir + "/" + robotConfigSubpath;
-            
-            std::vector<string> dirSplit;
-            std::stringstream ss(configPath);
-            string subPath;
 
-            while (std::getline(ss, subPath, '/')) {
-                dirSplit.push_back(subPath);
-            }
-            
-            bool flag = false;
-            for (const string& i : dirSplit) {
-                if(i == "install"){
-                    flag = true;
-                    break;
-                }        
-            }
-            if(flag){
-                string colconRoot = "";
-                int i = 0;
-                while(dirSplit[i] != "install"){
-                    colconRoot += "/" + dirSplit[i];
-                    i++;
-                }
-                colconRoot += "/src";
-                
-                std::vector<string> possiblePaths;
-                possiblePaths.push_back(colconRoot + "/riptide_core/riptide_descriptions/" + robotConfigSubpath);
-                possiblePaths.push_back(colconRoot + "/riptide_descriptions/" + robotConfigSubpath);
 
-                for(const string& path : possiblePaths){
-                    if(fs::exists(path)){
-                        configPath = path;
-                        RCLCPP_INFO(get_logger(), "Discovered source directory, overriding descriptions to use %s", configPath.c_str());
-                    }
-                }
-            }
-        }
-
-        string controlShareDir = ament_index_cpp::get_package_share_directory("riptide_controllers2");
-        string autoFFSubpath = "config/" + robotName + "_autoff.yaml";
-
-        if(fs::exists("/home/ros/colcon_deploy")){
-            RCLCPP_INFO(get_logger(), "I think I am not running on the orin!");
-            autoffConfigPath = controlShareDir + autoFFSubpath;
-        }else{
-            RCLCPP_INFO(get_logger(), "I think I am running on the orin!");
-            autoffConfigPath = "/bin" + robotName + "_autoff.yaml";     //this will need to change it is no longer /bin
-        }
-    }
-
-    void ControllerOverseer::thrusterTelemetryCB(riptide_msgs2::msg::DshotPartialTelemetry::SharedPtr msg){
+    void ControllerOverseer::thrusterTelemetryCB(mercury_msgs::msg::DshotPartialTelemetry::SharedPtr msg){
         bool adjustWeights = false;
 
         escPowerCheckTimer->reset();
@@ -352,7 +380,7 @@
         
         std::array<bool, 8> submerged = {false,false,false,false,false,false,false,false};
         
-        double killPlane = getYamlNodeAs<double>(configTree, {"controller_overseer", "thruster_kill_plane"});
+        double killPlane = getYamlNodeAs<double>(controllerTree, {"controller_overseer", "thruster_kill_plane"});
 
         geometry_msgs::msg::TransformStamped pos;
         try{
@@ -432,7 +460,7 @@
             
             ParameterValue pVal;
             pVal.type = ParameterType::PARAMETER_INTEGER_ARRAY;
-            pVal.integer_array_value = getYamlNodeAs<std::vector<int64_t>>(configTree, {"controller", "active_force_control"});
+            pVal.integer_array_value = getYamlNodeAs<std::vector<int64_t>>(controllerTree, {"controller", "active_force_control"});
 
             if(req->data){
                 //set teleop

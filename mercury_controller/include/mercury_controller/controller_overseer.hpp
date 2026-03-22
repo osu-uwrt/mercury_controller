@@ -90,7 +90,7 @@ class ControllerOverseer : public rclcpp::Node {
     /*
     From thruster and com portions of yaml file, set wrench matrix based on thruster positions.
     */
-    void generateThrusterForceMatrix(const YAML::Node& thrusterInfo, const YAML::Node& com);
+    void generateThrusterForceMatrix();
 
     /*
     Set yaml file config paths, right now this is just talos.yaml and talos_autoff.yaml; this will change
@@ -148,16 +148,19 @@ class ControllerOverseer : public rclcpp::Node {
     std::array<double, 8> thrusterWeights;
 
     //yaml trees
-    YAML::Node configTree;
+    YAML::Node controllerTree;
     YAML::Node autoffTree;
     YAML::Node thrusterInfo;
-    YAML::Node com;
+
+    //position of center of mass
+    std::vector<double> com;
 
     //thruster mode, 0: normal, 1: low downdraft
     int thrusterMode = 0;
 
-    //path to autoff config yaml file
+    //path to config yaml files
     string autoffConfigPath = "";
+    string configPath;
 
     //pointer to simulink model class which calls set and list params services
     std::shared_ptr<SimulinkModelClass> completeController;
@@ -204,7 +207,7 @@ class ControllerOverseer : public rclcpp::Node {
     double defaultWeight, surfaceWeight, disabledWeight, lowDowndraftWeight;
 
     //parameters
-    string robotName, configPath, thrusterSolverName;
+    string robotName, thrusterSolverName;
     bool writeAutoFF;
 
 };
