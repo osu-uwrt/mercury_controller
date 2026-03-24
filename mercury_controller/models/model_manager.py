@@ -18,13 +18,13 @@ import re
 # Figure out location of the models in the src tree. This may be weird because we may be running out of the install tree
 #
 FILE_LOC = os.path.abspath(__file__)
-CONTROLLERS_ROOT_LOCATION = os.path.join(FILE_LOC[0 : FILE_LOC.find("/riptide_controllers/")], 
-                                         "riptide_control", "riptide_controllers")
+CONTROLLERS_ROOT_LOCATION = os.path.join(FILE_LOC[0 : FILE_LOC.find("/mercury_controller/")], 
+                                         "mercury_controller", "mercury_controller")
 
 # check for install directory
 if CONTROLLERS_ROOT_LOCATION.find("/install/") >= 0:
     CONTROLLERS_ROOT_LOCATION = os.path.join(CONTROLLERS_ROOT_LOCATION[0 : CONTROLLERS_ROOT_LOCATION.find("/install/")],
-                                             "src", "riptide_control", "riptide_controllers")
+                                             "src", "mercury_controller", "mercury_controller")
 
 UWRT_ROOT   = os.path.expanduser("~/osu-uwrt")
 MODELS_ROOT = os.path.join(CONTROLLERS_ROOT_LOCATION, "models")
@@ -89,7 +89,7 @@ CLEANABLE_FILE_PATTERNS = [
     "**/*.mex*"
 ]
 
-SIMULINK_PROJECT_NAME = "Riptide_control_models.prj"
+SIMULINK_PROJECT_NAME = "mercury_control_models.prj"
 
 #cmdline names
 GENERATE_PACKAGES_TASK_NAME = "generate_packages"
@@ -211,7 +211,7 @@ def clean_workspace(archives_dir: str, local_dir: str, deploy_dir: str, full_cle
     #full clean with user consent if necessary
     if full_clean:
         print("Specifying --full-clean will result in custom message support being deleted. This can be regenerated with the command: \n" + \
-              f"  ros2 run riptide_controllers2 model_manager.py {REFRESH_MSGS_TASK_NAME}.\n")
+              f"  ros2 run mercury_controller model_manager.py {REFRESH_MSGS_TASK_NAME}.\n")
         if yesNoPrompt("Include custom message support files in clean?", assume_yes):
             to_delete.append(os.path.expanduser("~/osu-uwrt/matlab/custom_msgs"))
         else:
@@ -518,7 +518,7 @@ def wrap_entries(arr: str, wrapper: str):
 def parse_args():
     parser = argparse.ArgumentParser(
         prog = "model_manager.py",
-        description = "Generates c++ packages from Simulink models in the riptide_controllers source tree. This program will, " + \
+        description = "Generates c++ packages from Simulink models in the mercury_controller source tree. This program will, " + \
                             "unless otherwise specified using the arguments below, download all available models or " + \
                             "invoke MATLAB to build them with every available config. The number of " + \
                             "generated/downloaded packages will be equal to the " + \
