@@ -21,9 +21,9 @@ else
     error("Cannot find the osu-uwrt directory!");
 end
 
-MSG_PKG_NAME = "riptide_msgs2";
+MSG_PKG_NAME = "mercury_msgs";
 MSG_PKG_LOCATION = fullfile(UWRT_ROOT_DIR, uwrt_work_dir, ...
-    'src', 'riptide_core', 'riptide_msgs');
+    'src', 'mercury_common', 'mercury_msgs');
 
 % prepare the work dir by deleting it, re-creating it, then copying the
 % messages package into it
