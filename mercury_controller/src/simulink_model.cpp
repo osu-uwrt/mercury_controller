@@ -5,7 +5,7 @@
 
 
     //constructor
-    SimulinkModelClass::SimulinkModelClass(std::shared_ptr<ControllerOverseer> overseerNode, string nodeName) : overseer(overseerNode), nodeName(nodeName), modelActive(false), paramsLoaded(false){
+    SimulinkModelClass::SimulinkModelClass(std::shared_ptr<ControllerOverseer> overseerNode, string name) : overseer(overseerNode), nodeName(name), modelActive(false), paramsLoaded(false){
         lastReloadTime = overseer->get_clock()->now();
         reloadParamService = overseerNode->create_service<std_srvs::srv::Trigger>("controller_overseer/update_" + nodeName + "_params", std::bind(&SimulinkModelClass::reloadParametersCallback, this,  std::placeholders::_1, std::placeholders::_2));
     }

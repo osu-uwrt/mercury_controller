@@ -67,7 +67,7 @@ class SimulinkModelClass{
     std::vector<std::pair<std::string,std::vector<int64_t>>> arrayV;
 
     //constructor
-    SimulinkModelClass(std::shared_ptr<ControllerOverseer> overseerNode, string nodeName);
+    SimulinkModelClass(std::shared_ptr<ControllerOverseer> overseerNode, string name);
 
     /*
         Checks if model is active, handles when model comes up or down.
