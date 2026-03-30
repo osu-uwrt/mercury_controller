@@ -13,15 +13,15 @@ function generate_cpp_packages(models, configs)
     % contextual information
     current_file = mfilename('fullpath');
     current_file_dir = get_dirname(current_file);
-    
+
     % ensure we are in the correct directory
     fprintf("Changing current directory to %s\n", current_file_dir)
     cd(current_file_dir);
-    
+
     %open project to add all needed resources to the path
     fprintf("Opening Project\n");
-    proj = openProject("Riptide_control_models.prj");
-    
+    proj = openProject("mercury_control_models.prj");
+
     %ensure generated_models directory exists
     fprintf("Preparing output directory\n");
     if isfolder("generated_models")
@@ -31,12 +31,12 @@ function generate_cpp_packages(models, configs)
 
     %generate ROS packages from simulink models
     open_all_models(models);
-    
+
     for i = 1 : length(configs)
         generate_all_packages_for_config(configs(i), models);
     end
     close_all_models(models);
-    
+
     fprintf("Closing Project\n");
     close(proj);
 end
@@ -122,7 +122,7 @@ function load_config_onto_models(models, config_name, temp_name)
     config_builder = str2func(config_name);
     config = config_builder();
     config.name = temp_name;
-    
+
     for i = 1 : length(models)
         model = models(i);
         fprintf("Attaching %s to %s\n", config_name, model);
@@ -139,7 +139,7 @@ function generate_all_packages_for_config(config, models)
 
     %get old configs
     old_configs = get_active_configs(models);
-    
+
     %unload temp config from models in case it was already loaded
     unload_temp_config_from_models(models, old_configs, TEMP_CONFIG_NAME);
     old_configs = get_active_configs(models);
@@ -150,7 +150,7 @@ function generate_all_packages_for_config(config, models)
     for i = 1 : length(models)
         model = models(i);
         slbuild(model);
-        
+
         % copy generated code to output directory
         fprintf("Copying generated code to the output directory\n");
         tarname = model + ".tgz"; % expected name of matlabs output archive

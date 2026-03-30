@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 
 #
-# UWRT controller MATLAB model manager. 
+# UWRT controller MATLAB model manager.
 # handles code generation, download, and other general management of matlab and all simulink models in all configurations.
 #
 
@@ -18,23 +18,26 @@ import re
 # Figure out location of the models in the src tree. This may be weird because we may be running out of the install tree
 #
 FILE_LOC = os.path.abspath(__file__)
-CONTROLLERS_ROOT_LOCATION = os.path.join(FILE_LOC[0 : FILE_LOC.find("/mercury_controller/")], 
+CONTROLLERS_ROOT_LOCATION = os.path.join(FILE_LOC[0: FILE_LOC.find("/mercury_controller/")],
                                          "mercury_controller", "mercury_controller")
 
 # check for install directory
 if CONTROLLERS_ROOT_LOCATION.find("/install/") >= 0:
-    CONTROLLERS_ROOT_LOCATION = os.path.join(CONTROLLERS_ROOT_LOCATION[0 : CONTROLLERS_ROOT_LOCATION.find("/install/")],
+    CONTROLLERS_ROOT_LOCATION = os.path.join(CONTROLLERS_ROOT_LOCATION[0: CONTROLLERS_ROOT_LOCATION.find("/install/")],
                                              "src", "mercury_controller", "mercury_controller")
 
-UWRT_ROOT   = os.path.expanduser("~/osu-uwrt")
+UWRT_ROOT = os.path.expanduser("~/osu-uwrt")
 MODELS_ROOT = os.path.join(CONTROLLERS_ROOT_LOCATION, "models")
 
-#check that paths exist
+# check that paths exist
+
+
 def assert_path_exists(name, pth):
     if not os.path.exists(pth):
-        print(f"FATAL: Could not verify the existence of the {name} in the source tree. " + \
-            "Please ensure that the source tree exists, otherwise this script serves no purpose", file=sys.stderr)
+        print(f"FATAL: Could not verify the existence of the {name} in the source tree. " +
+              "Please ensure that the source tree exists, otherwise this script serves no purpose", file=sys.stderr)
         exit()
+
 
 assert_path_exists("uwrt root", UWRT_ROOT)
 print(f"Detected uwrt root as {UWRT_ROOT}")
@@ -46,20 +49,22 @@ print(f"Detected models root as {MODELS_ROOT}")
 #
 
 ARCHITECTURE_CONFIGS = {
-    "x86" : "x86_cfg",
-    "arm" : "arm_cfg"
+    "x86": "x86_cfg",
+    "arm": "arm_cfg"
 }
+
 
 def determine_system_cfg(machine: str):
     for key in ARCHITECTURE_CONFIGS.keys():
         if key in machine:
             return ARCHITECTURE_CONFIGS[key]
-    
+
     return ""
 
 #
 # CONSTS
 #
+
 
 DEFAULT_LOCAL_CONFIG = determine_system_cfg(platform.uname().machine)
 print(f"Selecting local config {DEFAULT_LOCAL_CONFIG}")
@@ -67,15 +72,17 @@ print()
 DEFAULT_DEPLOY_CONFIG = ARCHITECTURE_CONFIGS["arm"]
 DEFAULT_ROBOT_NAME = "orin"
 DEFAULT_ARCHIVE_DIR = os.path.join(UWRT_ROOT, "controller_model_archives")
-DEFAULT_LOCAL_DIR = os.path.join(UWRT_ROOT, "development", "software", "src", "controller_models")
-DEFAULT_DEPLOY_DIR = os.path.join(UWRT_ROOT, "release", "src", "controller_models")
+DEFAULT_LOCAL_DIR = os.path.join(
+    UWRT_ROOT, "mercury_dev", "src", "controller_models")
+DEFAULT_DEPLOY_DIR = os.path.join(
+    UWRT_ROOT, "mercury_release", "src", "controller_models")
 
-DEFAULT_DOWNLOAD_LATEST_URL = "https://github.com/osu-uwrt/riptide_control/releases/latest/download/"
-DEFAULT_DOWNLOAD_VERSION_URL = "https://github.com/osu-uwrt/riptide_control/releases/download/"
+DEFAULT_DOWNLOAD_LATEST_URL = "https://github.com/osu-uwrt/mercury_controller/releases/latest/download/"
+DEFAULT_DOWNLOAD_VERSION_URL = "https://github.com/osu-uwrt/mercury_controller/releases/download/"
 
-#list of file patterns that are okay to delete when cleaning the workspace
-#these should all be in the gitignore.
-#all paths are evaluated relative to MODELS_ROOT
+# list of file patterns that are okay to delete when cleaning the workspace
+# these should all be in the gitignore.
+# all paths are evaluated relative to MODELS_ROOT
 CLEANABLE_FILE_PATTERNS = [
     "**/+bus_conv_fcns",
     "**/*_ert_rtw",
@@ -91,29 +98,31 @@ CLEANABLE_FILE_PATTERNS = [
 
 SIMULINK_PROJECT_NAME = "mercury_control_models.prj"
 
-#cmdline names
+# cmdline names
 GENERATE_PACKAGES_TASK_NAME = "generate_packages"
-REFRESH_MSGS_TASK_NAME      = "refresh_custom_msg_support"
+REFRESH_MSGS_TASK_NAME = "refresh_custom_msg_support"
 DOWNLOAD_PACKAGES_TASK_NAME = "download_packages"
-DELETE_PACKAGES_TASK_NAME   = "delete_packages"
-CLEAN_WORKSPACE_TASK_NAME   = "clean_workspace"
-OPEN_PROJECT_TASK_NAME    = "open_project"
-PROCESS_CACHED_TASK_NAME    = "process_cached"
+DELETE_PACKAGES_TASK_NAME = "delete_packages"
+CLEAN_WORKSPACE_TASK_NAME = "clean_workspace"
+OPEN_PROJECT_TASK_NAME = "open_project"
+PROCESS_CACHED_TASK_NAME = "process_cached"
 
 
 def execute_command(cmd: 'list[str]', cwd: str):
     proc = subprocess.run(cmd, cwd=cwd)
     if proc.returncode != 0:
         cmdstr = " ".join(cmd)
-        raise RuntimeError(f"Command {cmdstr} returned with non-zero exit code {proc.returncode}")
+        raise RuntimeError(
+            f"Command {cmdstr} returned with non-zero exit code {proc.returncode}")
 
 
 def generate_packages(models: 'list[str]', configs: 'list[str]'):
     # "wrap" model and config names with quotation marks for matlab
     wrapped_models = [f"\"{model}\"" for model in models]
     wrapped_configs = [f"\"{config}\"" for config in configs]
-    
-    matlab_cmd_args = [f"[{','.join(wrapped_models)}]", f"[{','.join(wrapped_configs)}]"]
+
+    matlab_cmd_args = [
+        f"[{','.join(wrapped_models)}]", f"[{','.join(wrapped_configs)}]"]
     matlab_cmd = ",".join(matlab_cmd_args)
     bash_cmd = ["matlab", "-batch", f"generate_cpp_packages({matlab_cmd})"]
 
@@ -130,8 +139,8 @@ def refresh_custom_messages():
 
 
 def download_packages(
-    url: str, 
-    local_config: str, 
+    url: str,
+    local_config: str,
     deploy_config: str,
     models: 'list[str]',
     configs: 'list[str]',
@@ -139,44 +148,46 @@ def download_packages(
 ):
     local_config_name = get_object_name_from_file(local_config)
     deploy_config_name = get_object_name_from_file(deploy_config)
-    print(f"Downloading packages from url {url} using local config {local_config_name} and deploy config {deploy_config_name}")
-    
+    print(
+        f"Downloading packages from url {url} using local config {local_config_name} and deploy config {deploy_config_name}")
+
     # find and clear generated output dir
     generated_output_directory = os.path.join(MODELS_ROOT, "generated_models")
     ensure_not_directory_exists(generated_output_directory)
     ensure_directory_exists(generated_output_directory)
-    
+
     if not yesNoPrompt("Proceed with download?", assume_yes):
         print("Not proceeding with operation.")
         exit(0)
-        
+
     # perform download
     for model in models:
         for cfg in configs:
             try:
-                download_single_package(url, model, cfg, generated_output_directory)
-            except KeyboardInterrupt: #needed otherwise wget might go on a rampage because it becomes uninterruptable
+                download_single_package(
+                    url, model, cfg, generated_output_directory)
+            except KeyboardInterrupt:  # needed otherwise wget might go on a rampage because it becomes uninterruptable
                 exit()
             except:
-                print(f"Failed to Download model: {model} with config {cfg}. Please ensure the model exists!" + \
+                print(f"Failed to Download model: {model} with config {cfg}. Please ensure the model exists!" +
                       f"Tt should be listed as an asset at the link {url}", file=sys.stderr)
 
 
 def delete_packages(
-    packages: 'list[str]', 
+    packages: 'list[str]',
     exclude_archive: bool,
-    archives_dir: str, 
+    archives_dir: str,
     exclude_local: bool,
-    local_dir: str, 
+    local_dir: str,
     exclude_deploy: bool,
-    deploy_dir: str, 
+    deploy_dir: str,
     assume_yes: bool
 ):
     def print_delete_summary(to_delete: 'list[str]', category: str):
         print(f"Deleting from {category}:")
         print_list(to_delete)
         print()
-    
+
     (delete_archive, delete_local, delete_deploy) = resolve_archives_to_delete(
         packages,
         exclude_archive,
@@ -186,16 +197,16 @@ def delete_packages(
         exclude_deploy,
         deploy_dir
     )
-    
+
     print_delete_summary(delete_archive, "archive")
     print_delete_summary(delete_local, "local")
     print_delete_summary(delete_deploy, "deploy")
-        
-    #remove if user consents
+
+    # remove if user consents
     if yesNoPrompt("Continue?", assume_yes):
         print("Deleting")
         for name in delete_archive + delete_local + delete_deploy:
-            #expect file
+            # expect file
             remove_file_or_directory(os.path.join(archives_dir, name))
     else:
         print("Not deleting")
@@ -204,21 +215,23 @@ def delete_packages(
 def clean_workspace(archives_dir: str, local_dir: str, deploy_dir: str, full_clean: bool, no_delete_packages: bool, assume_yes: bool):
     # list will keep track of absolute path of items to delete
     to_delete = []
-    
-    #change into models directory to avoid hitting items outside of there
+
+    # change into models directory to avoid hitting items outside of there
     os.chdir(MODELS_ROOT)
-    
-    #full clean with user consent if necessary
+
+    # full clean with user consent if necessary
     if full_clean:
-        print("Specifying --full-clean will result in custom message support being deleted. This can be regenerated with the command: \n" + \
+        print("Specifying --full-clean will result in custom message support being deleted. This can be regenerated with the command: \n" +
               f"  ros2 run mercury_controller model_manager.py {REFRESH_MSGS_TASK_NAME}.\n")
         if yesNoPrompt("Include custom message support files in clean?", assume_yes):
-            to_delete.append(os.path.expanduser("~/osu-uwrt/matlab/custom_msgs"))
+            to_delete.append(os.path.expanduser(
+                "~/osu-uwrt/matlab/custom_msgs"))
         else:
-            print("Custom message support will NOT be cleaned as a result of this operation.")
-        
+            print(
+                "Custom message support will NOT be cleaned as a result of this operation.")
+
         print()
-    
+
     # add package items if not specified otherwise
     if not no_delete_packages:
         (delete_archive, delete_local, delete_deploy) = resolve_archives_to_delete(
@@ -231,18 +244,18 @@ def clean_workspace(archives_dir: str, local_dir: str, deploy_dir: str, full_cle
             deploy_dir)
 
         to_delete += delete_archive + delete_local + delete_deploy
-    
-    #add glob files
+
+    # add glob files
     for pattern in CLEANABLE_FILE_PATTERNS:
         items = glob.glob(pattern, recursive=True)
         for item in items:
             to_delete.append(os.path.abspath(item))
-    
-    #print a summary of what we will do
+
+    # print a summary of what we will do
     print("The clean operation will result in the following items being deleted:")
     print_list(to_delete)
     print()
-    
+
     if yesNoPrompt("Continue?", assume_yes):
         print("Deleting")
         for item in to_delete:
@@ -264,7 +277,7 @@ def archive_packages(archives_dir: str):
     generated_output_directory = os.path.join(MODELS_ROOT, "generated_models")
     ensure_not_directory_exists(archives_dir)
     shutil.copytree(generated_output_directory, archives_dir)
-    
+
 
 def download_single_package(url, model, config, output_dir):
     asset_name = model + "_" + config + ".tgz"
@@ -273,63 +286,67 @@ def download_single_package(url, model, config, output_dir):
 
 
 def handle_local_packages(local_config: str, local_dir: str, with_build: bool):
-    print(f"Storing local packages ({os.path.basename(local_config)}) in {local_dir} and " + \
-        f"{'building' if with_build else 'not building'}")
-    
+    print(f"Storing local packages ({os.path.basename(local_config)}) in {local_dir} and " +
+          f"{'building' if with_build else 'not building'}")
+
     local_dir_container = os.path.dirname(local_dir)
     if not os.path.exists(local_dir_container):
-        print(f"No local path {local_dir_container}. Skipping handling of local (development) packages.")
+        print(
+            f"No local path {local_dir_container}. Skipping handling of local (development) packages.")
         return
-    
+
     handle_packages_generic(local_config, local_dir)
-    
+
     if with_build:
-        # figure out where to run the build. If the directory is within UWRT_ROOT/development/software/src, then 
+        # figure out where to run the build. If the directory is within UWRT_ROOT/development/software/src, then
         # the build will be run in UWRT_ROOT/developement/software. Otherwise, the build will happen in place
         build_dir = local_dir
         software_dir = os.path.join(UWRT_ROOT, "development", "software")
         if software_dir in local_dir:
-            print(f"Local directory detected in software directory. Building in software directory")
+            print(
+                f"Local directory detected in software directory. Building in software directory")
             build_dir = software_dir
-        
-        #read off directory names to figure out the names of the packages to build
+
+        # read off directory names to figure out the names of the packages to build
         pkgs = os.listdir(local_dir)
         cmd = ["colcon", "build"]
         if len(pkgs) > 0:
             cmd += ["--packages-select"] + pkgs
-            
+
         print(f"Building models in directory {build_dir}")
         execute_command(cmd, build_dir)
 
 
 def handle_deploy_packages(deploy_config: str, deploy_dir: str, with_deploy: bool, deploy_target: str):
-    print(f"Storing deploy packages ({os.path.basename(deploy_config)}) in {deploy_dir} and " + \
-        f"{'deploying' if with_deploy else 'not deploying'} to {deploy_target}")
+    print(f"Storing deploy packages ({os.path.basename(deploy_config)}) in {deploy_dir} and " +
+          f"{'deploying' if with_deploy else 'not deploying'} to {deploy_target}")
 
     deploy_dir_container = os.path.dirname(deploy_dir)
     if not os.path.exists(deploy_dir_container):
-        print(f"No deploy path {deploy_dir_container}. Skipping handling of deploy (release) packages.")
+        print(
+            f"No deploy path {deploy_dir_container}. Skipping handling of deploy (release) packages.")
         return
-    
+
     handle_packages_generic(deploy_config, deploy_dir)
-    
+
     if with_deploy:
-        # figure out where to run the deploy. If the directory is within UWRT_ROOT/release/src, then 
+        # figure out where to run the deploy. If the directory is within UWRT_ROOT/release/src, then
         # the build will be run in UWRT_ROOT/developement/software. Otherwise, the build will happen in place
-        
+
         if ping_device(deploy_target):
             cmd_dir = deploy_dir
-            rel_dir = os.path.join(UWRT_ROOT, "release")
+            rel_dir = os.path.join(UWRT_ROOT, "mercury_release")
             if rel_dir in deploy_dir:
-                print(f"Local directory detected in release directory. Deploying from release directory")
+                print(
+                    f"Local directory detected in mercury_release directory. Deploying from mercury_release directory")
                 cmd_dir = rel_dir
-            
-            #read off directory names to figure out which packages to deploy
+
+            # read off directory names to figure out which packages to deploy
             pkgs = os.listdir(deploy_dir)
             cmd = ["colcon", "deploy", deploy_target]
             if len(pkgs) > 0:
                 cmd += ["--packages-select"] + pkgs
-            
+
             print(f"Building models in directory {cmd_dir}")
             execute_command(cmd, cmd_dir)
         else:
@@ -339,67 +356,72 @@ def handle_deploy_packages(deploy_config: str, deploy_dir: str, with_deploy: boo
 def handle_packages_generic(config: str, dir: str):
     generated_output_directory = os.path.join(MODELS_ROOT, "generated_models")
     config_name = get_object_name_from_file(config)
-    archive_names = filter_list(os.listdir(generated_output_directory), config_name)
-    
+    archive_names = filter_list(os.listdir(
+        generated_output_directory), config_name)
+
     ensure_directory_exists(dir)
     unpack_archives(generated_output_directory, archive_names, dir)
 
 
 def resolve_archives_to_delete(
-    packages: 'list[str]', 
+    packages: 'list[str]',
     exclude_archive: bool,
-    archives_dir: str, 
+    archives_dir: str,
     exclude_local: bool,
-    local_dir: str, 
+    local_dir: str,
     exclude_deploy: bool,
-    deploy_dir: str, 
+    deploy_dir: str,
 ):
     packages_snake = [title_to_snake(package) for package in packages]
-    
+
     def resolve_files_to_delete(dir: str, packages: 'list[str]', exclude: bool, include_build_install: bool, ws_base_dir: str):
-        to_delete = [] #contains absolute paths of items to be deleted
+        to_delete = []  # contains absolute paths of items to be deleted
         if not exclude and os.path.exists(dir):
             dir_contents = os.listdir(dir)
             for file_name in dir_contents:
                 if len(packages) > 0:
                     for package in packages:
-                            if file_name.startswith(package):
-                                to_delete.append(os.path.join(dir, file_name))
+                        if file_name.startswith(package):
+                            to_delete.append(os.path.join(dir, file_name))
                 else:
                     to_delete.append(os.path.join(dir, file_name))
-            
+
             # delete the package from the build and install directories if necessary
             if include_build_install:
-                delete_tmp = to_delete.copy() #avoid infinite loop
+                delete_tmp = to_delete.copy()  # avoid infinite loop
                 for path in delete_tmp:
                     file_name = os.path.basename(path)
                     build_path = os.path.join(ws_base_dir, "build", file_name)
-                    install_path = os.path.join(ws_base_dir, "install", file_name)
-                    
+                    install_path = os.path.join(
+                        ws_base_dir, "install", file_name)
+
                     if os.path.exists(build_path):
                         to_delete.append(build_path)
-                    
+
                     if os.path.exists(install_path):
                         to_delete.append(install_path)
-            
+
         return to_delete
-    
-    #figure out where workspace bases are for local and deploy
+
+    # figure out where workspace bases are for local and deploy
     local_ws_dir = local_dir
     software_dir = os.path.join(UWRT_ROOT, "development", "software")
     if software_dir in local_dir:
         local_ws_dir = software_dir
-    
+
     deploy_ws_dir = deploy_dir
-    release_dir = os.path.join(UWRT_ROOT, "release")
+    release_dir = os.path.join(UWRT_ROOT, "mercury_release")
     if release_dir in deploy_dir:
         deploy_ws_dir = release_dir
-    
-    #figure out what to delete out of archive directory
-    delete_from_archive = resolve_files_to_delete(archives_dir, packages, exclude_archive, False, "")
-    delete_from_local = resolve_files_to_delete(local_dir, packages_snake, exclude_local, True, local_ws_dir)
-    delete_from_deploy = resolve_files_to_delete(deploy_dir, packages_snake, exclude_deploy, True, deploy_ws_dir)
-    
+
+    # figure out what to delete out of archive directory
+    delete_from_archive = resolve_files_to_delete(
+        archives_dir, packages, exclude_archive, False, "")
+    delete_from_local = resolve_files_to_delete(
+        local_dir, packages_snake, exclude_local, True, local_ws_dir)
+    delete_from_deploy = resolve_files_to_delete(
+        deploy_dir, packages_snake, exclude_deploy, True, deploy_ws_dir)
+
     return (delete_from_archive, delete_from_local, delete_from_deploy)
 
 
@@ -423,9 +445,10 @@ def ping_device(name: str):
 def yesNoPrompt(question: str, assume_yes: bool):
     if assume_yes:
         return True
-    
+
     yes_no = input(question + " [y/n]: ")
     return yes_no.lower() == "y" or len(yes_no) == 0
+
 
 def ensure_directory_exists(dir: str):
     if not os.path.exists(dir):
@@ -446,7 +469,7 @@ def remove_file_or_directory(path: str):
 
 def get_object_name_from_file(file):
     file_name = os.path.basename(file)
-    object_name = file_name[0 : file_name.find('.')]
+    object_name = file_name[0: file_name.find('.')]
     return object_name
 
 
@@ -454,7 +477,7 @@ def get_object_names_from_files(files):
     names = []
     for file in files:
         names.append(get_object_name_from_file(file))
-    
+
     return names
 
 
@@ -463,37 +486,39 @@ def filter_list(lis, filt):
     for item in lis:
         if filt in item:
             filtered.append(item)
-    
+
     return filtered
 
 
 def list_intersection(l1, l2):
     return [item for item in l1 if item in l2]
 
-#returns l1 - l2
+# returns l1 - l2
+
+
 def list_difference(l1, l2):
     return [item for item in l1 if item not in l2]
 
 
-def unpack_archives(src: str, files: 'list[str]', dst: str):    
+def unpack_archives(src: str, files: 'list[str]', dst: str):
     for file_name in files:
         print(f"Unpacking archive {file_name}")
         src_name = os.path.join(src, file_name)
         dst_name = os.path.join(dst, file_name)
         shutil.copyfile(src_name, dst_name)
-        
+
         # invoke tar to unpack archive
         tar_cmd = ["tar", "-xf", dst_name]
         execute_command(tar_cmd, cwd=dst)
-        
-        #remove archive
+
+        # remove archive
         remove_file_or_directory(dst_name)
 
 
 def print_list(lis: list):
     for item in lis:
         print(f"  {item}")
-           
+
 
 def get_abs_paths(paths: 'list[str]'):
     abs_paths = []
@@ -511,116 +536,122 @@ def wrap_entries(arr: str, wrapper: str):
     wrapped = []
     for i in range(0, len(arr)):
         wrapped.append(wrap(arr[i], wrapper))
-    
+
     return wrapped
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        prog = "model_manager.py",
-        description = "Generates c++ packages from Simulink models in the mercury_controller source tree. This program will, " + \
-                            "unless otherwise specified using the arguments below, download all available models or " + \
-                            "invoke MATLAB to build them with every available config. The number of " + \
-                            "generated/downloaded packages will be equal to the " + \
-                            "number of actionable models times the number of actionable configs. After generating the packages, " + \
-                            "this program will automatically move the archives into the directory specified by --archives-dir, " + \
-                            "the local packages (runnable by the local machine) into the directory specified by --local-dir, " + \
-                            "and the deployable packages (runnable by the robot) into the directory specified by --deploy-dir. " + \
-                            "Then, unless otherwise specified by the --no-build and --no-deploy flags, the program will " + \
-                            "invoke Colcon to build the local packages and deploy the deployable ones."
+        prog="model_manager.py",
+        description="Generates c++ packages from Simulink models in the mercury_controller source tree. This program will, " +
+        "unless otherwise specified using the arguments below, download all available models or " +
+        "invoke MATLAB to build them with every available config. The number of " +
+        "generated/downloaded packages will be equal to the " +
+        "number of actionable models times the number of actionable configs. After generating the packages, " +
+        "this program will automatically move the archives into the directory specified by --archives-dir, " +
+        "the local packages (runnable by the local machine) into the directory specified by --local-dir, " +
+        "and the deployable packages (runnable by the robot) into the directory specified by --deploy-dir. " +
+        "Then, unless otherwise specified by the --no-build and --no-deploy flags, the program will " +
+        "invoke Colcon to build the local packages and deploy the deployable ones."
     )
-    
+
     parser.add_argument("--test", action="store_true")
-    
+
     parser.add_argument("-y", "--assume-yes", action="store_true",
                         help="Assume yes on all prompts")
-    
+
     select_parser = argparse.ArgumentParser(add_help=False)
-    
+
     select_parser.add_argument("--models-select", action="store", default=[], nargs="+",
-                        help="Select specific models to build. Models not specified after this flag will not be built. " + \
-                            "This flag takes precedence over --models-ignore. If neither --models-ignore or --models-select " + \
-                            "are used, then all packages will be built")
-    
+                               help="Select specific models to build. Models not specified after this flag will not be built. " +
+                               "This flag takes precedence over --models-ignore. If neither --models-ignore or --models-select " +
+                               "are used, then all packages will be built")
+
     select_parser.add_argument("--models-ignore", action="store", default=[], nargs="+",
-                        help="Select specific models NOT to build. If --models-select is used, this flag will be ignored")
-    
+                               help="Select specific models NOT to build. If --models-select is used, this flag will be ignored")
+
     select_parser.add_argument("--configs-select", action="store", default=[], nargs="+",
-                        help="Select specific confurations to use when building the models. Configs not specified after " + \
-                            "this flag will not be used. This flag takes precedence over --configs-ignore. If neither " + \
-                            "--configs-ignore or --configs-select are used, then all configs will be used")
-    
+                               help="Select specific confurations to use when building the models. Configs not specified after " +
+                               "this flag will not be used. This flag takes precedence over --configs-ignore. If neither " +
+                               "--configs-ignore or --configs-select are used, then all configs will be used")
+
     select_parser.add_argument("--configs-ignore", action="store", default=[],  nargs="+",
-                        help="Select specific configs NOT to build. If --configs-select is used, this flag will be ignored")
-    
+                               help="Select specific configs NOT to build. If --configs-select is used, this flag will be ignored")
+
     select_parser.add_argument("--local-config", action="store", default=DEFAULT_LOCAL_CONFIG,
-                        help="Sets the config that generates code runnable by the local machine. If allowed, code generated " + \
-                            "with this config will be automatically transferred to the local-dir and built.")
-    
-    select_parser.add_argument("--deploy-config", action = "store", default=DEFAULT_DEPLOY_CONFIG,
-                        help="Sets the config that generates code runnable by the robot. If allowed, code generated with " + \
-                            "this config will be automatically transferred to the deploy-dir and built")
-    
+                               help="Sets the config that generates code runnable by the local machine. If allowed, code generated " +
+                               "with this config will be automatically transferred to the local-dir and built.")
+
+    select_parser.add_argument("--deploy-config", action="store", default=DEFAULT_DEPLOY_CONFIG,
+                               help="Sets the config that generates code runnable by the robot. If allowed, code generated with " +
+                               "this config will be automatically transferred to the deploy-dir and built")
+
     dir_parser = argparse.ArgumentParser(add_help=False)
-    
+
     dir_parser.add_argument("--archives-dir", action="store", default=DEFAULT_ARCHIVE_DIR,
-                        help="The path to the directory in which to store the tar archives containing the generated packages")
-    
+                            help="The path to the directory in which to store the tar archives containing the generated packages")
+
     dir_parser.add_argument("--local-dir", action="store", default=DEFAULT_LOCAL_DIR,
-                        help="The path to the directory in which to store the local packages (packages which are runnable by the " + \
+                            help="The path to the directory in which to store the local packages (packages which are runnable by the " +
                             "local machine)")
 
     dir_parser.add_argument("--deploy-dir", action="store", default=DEFAULT_DEPLOY_DIR,
-                        help="The path to the directory in which to store the deployable packages (packages which are runnable by " + \
+                            help="The path to the directory in which to store the deployable packages (packages which are runnable by " +
                             "the robot)")
-    
-    process_parser = argparse.ArgumentParser(add_help=False, parents=[ select_parser, dir_parser ])
+
+    process_parser = argparse.ArgumentParser(
+        add_help=False, parents=[select_parser, dir_parser])
 
     process_parser.add_argument("--no-process-local", action="store_true",
-                        help="If specified, local packages will not be unpacked and built")
-    
+                                help="If specified, local packages will not be unpacked and built")
+
     process_parser.add_argument("--no-process-deploy", action="store_true",
-                        help="If specified, deploy packages will not be unpacked and built")
-    
+                                help="If specified, deploy packages will not be unpacked and built")
+
     process_parser.add_argument("--build", action="store_true",
-                        help="If specified, the program will unpack the local packages but it will not attempt to build them")
-    
+                                help="If specified, the program will unpack the local packages but it will not attempt to build them")
+
     process_parser.add_argument("--deploy", action="store_true",
-                        help="If specified, the program will unpack the deploy packages but it will not attempt to deploy them")
-    
+                                help="If specified, the program will unpack the deploy packages but it will not attempt to deploy them")
+
     process_parser.add_argument("--deploy-target", action="store", default=DEFAULT_ROBOT_NAME,
-                        help="Specifies the name of the target to deploy the deployable packages to")
-    
+                                help="Specifies the name of the target to deploy the deployable packages to")
+
     #
     # SUBPARSERS
     #
-    subparsers = parser.add_subparsers(title="task", dest="task", help="The task to complete", required=True)
-    
-    #GENERATE_PACKAGES SUBPARSER
-    
-    generate_subparser = subparsers.add_parser(GENERATE_PACKAGES_TASK_NAME, parents=[ process_parser ], help="Generate Colcon packages from Simulink models")
-    
+    subparsers = parser.add_subparsers(
+        title="task", dest="task", help="The task to complete", required=True)
+
+    # GENERATE_PACKAGES SUBPARSER
+
+    generate_subparser = subparsers.add_parser(GENERATE_PACKAGES_TASK_NAME, parents=[
+                                               process_parser], help="Generate Colcon packages from Simulink models")
+
     generate_subparser.add_argument("--no-archive", action="store_true",
-                        help="If specified, the generated archives will not be stored")
-    
-    #REFRESH_CUSTOM_MSGS SUBPARSER
-    refresh_subparser = subparsers.add_parser(REFRESH_MSGS_TASK_NAME, help="Refresh MATLAB support for custom ROS message types")
-    
-    #DOWNLOAD_PACKAGES SUBPARSER
-    download_subparser = subparsers.add_parser(DOWNLOAD_PACKAGES_TASK_NAME, parents=[ process_parser ], help="Download released packages from the Internet")
-    
+                                    help="If specified, the generated archives will not be stored")
+
+    # REFRESH_CUSTOM_MSGS SUBPARSER
+    refresh_subparser = subparsers.add_parser(
+        REFRESH_MSGS_TASK_NAME, help="Refresh MATLAB support for custom ROS message types")
+
+    # DOWNLOAD_PACKAGES SUBPARSER
+    download_subparser = subparsers.add_parser(DOWNLOAD_PACKAGES_TASK_NAME, parents=[
+                                               process_parser], help="Download released packages from the Internet")
+
     download_subparser.add_argument("--from-url", action="store", default=DEFAULT_DOWNLOAD_LATEST_URL,
                                     help="Specifies the URL to download the asset from.")
-    
+
     download_subparser.add_argument("--from-release", action="store", default="latest",
                                     help="Specifies the github release from which to download the packages. Cannot be used with --from-url")
-    
-    #DELETE_PACKAGES SUBPARSER
-    delete_subparser = subparsers.add_parser(DELETE_PACKAGES_TASK_NAME, parents=[ dir_parser ], help="Delete packages from the local and deploy directories")
-    
+
+    # DELETE_PACKAGES SUBPARSER
+    delete_subparser = subparsers.add_parser(DELETE_PACKAGES_TASK_NAME, parents=[
+                                             dir_parser], help="Delete packages from the local and deploy directories")
+
     delete_subparser.add_argument("packages", action="store", nargs="*",
                                   help="specifies the packages to delete")
-    
+
     delete_subparser.add_argument("--exclude-archive", action="store_true",
                                   help="Exclude the archive directory when finding files to delete")
 
@@ -630,26 +661,30 @@ def parse_args():
     delete_subparser.add_argument("--exclude-deploy", action="store_true",
                                   help="Exclude the deploy directory when finding files to delete")
 
-    #CLEAN_WORKSPACE SUBPARSER
-    clean_subparser = subparsers.add_parser(CLEAN_WORKSPACE_TASK_NAME, parents=[ dir_parser ], help="Clean workspace by deleting gitignored files and built packages")
-    
+    # CLEAN_WORKSPACE SUBPARSER
+    clean_subparser = subparsers.add_parser(CLEAN_WORKSPACE_TASK_NAME, parents=[
+                                            dir_parser], help="Clean workspace by deleting gitignored files and built packages")
+
     clean_subparser.add_argument("--full-clean", action="store_true",
                                  help="If specified, important items like custom message support files will be deleted.")
-    
-    clean_subparser.add_argument("--no-delete-packages", action="store_true", 
+
+    clean_subparser.add_argument("--no-delete-packages", action="store_true",
                                  help="If specified, does not delete code generated from models (what delete_packages normally does)")
-    
-    #OPEN_PROJECT SUBPARSER
-    open_subparser = subparsers.add_parser(OPEN_PROJECT_TASK_NAME, help="Open the project in MATLAB")
-    
-    #PROCESS_CACHED SUBPARSER
-    process_subparser = subparsers.add_parser(PROCESS_CACHED_TASK_NAME, parents=[ process_parser ], help="Process cached packages that were already downloaded or generated")
-    
+
+    # OPEN_PROJECT SUBPARSER
+    open_subparser = subparsers.add_parser(
+        OPEN_PROJECT_TASK_NAME, help="Open the project in MATLAB")
+
+    # PROCESS_CACHED SUBPARSER
+    process_subparser = subparsers.add_parser(PROCESS_CACHED_TASK_NAME, parents=[
+                                              process_parser], help="Process cached packages that were already downloaded or generated")
+
     return parser.parse_args()
 
-def main():    
+
+def main():
     args = parse_args()
-    
+
     if args.task == REFRESH_MSGS_TASK_NAME:
         refresh_custom_messages()
     elif args.task == OPEN_PROJECT_TASK_NAME:
@@ -665,7 +700,7 @@ def main():
                 args.exclude_deploy,
                 args.deploy_dir,
                 args.assume_yes)
-            
+
         if args.task == CLEAN_WORKSPACE_TASK_NAME:
             clean_workspace(
                 args.archives_dir,
@@ -674,79 +709,83 @@ def main():
                 args.full_clean,
                 args.no_delete_packages,
                 args.assume_yes)
-        
+
         if args.task in [GENERATE_PACKAGES_TASK_NAME, DOWNLOAD_PACKAGES_TASK_NAME, PROCESS_CACHED_TASK_NAME]:
             # these options use the select parser
-            
+
             #
             # filter out models based on models_select and models_ignore
             #
-            
-            #glob all models not in the referenced_models directory
+
+            # glob all models not in the referenced_models directory
             # model_files = glob.glob(os.path.join(MODELS_ROOT, "[!referenced_models]**/*.slx"), recursive=True)
-            model_files = glob.glob(os.path.join(MODELS_ROOT, "**/*.slx"), recursive=True)
-            
-            #exclude all models in referenced_models
+            model_files = glob.glob(os.path.join(
+                MODELS_ROOT, "**/*.slx"), recursive=True)
+
+            # exclude all models in referenced_models
             unreferenced_models = []
             for model_file in model_files:
                 if not "referenced_models" in model_file:
                     unreferenced_models.append(model_file)
-            
+
             model_names = get_object_names_from_files(unreferenced_models)
-                        
+
             if len(args.models_select) > 0:
-                model_names = list_intersection(model_names, args.models_select)
+                model_names = list_intersection(
+                    model_names, args.models_select)
             elif len(args.models_ignore) > 0:
                 model_names = list_difference(model_names, args.models_ignore)
-            
+
             print(f"Processing models: {model_names}")
-            
-            #determine configs
+
+            # determine configs
             cfg_names = [args.local_config]
             if args.deploy_config != args.local_config:
                 cfg_names.append(args.deploy_config)
-            
-            #filter out configs based on configs_select and configs_ignore
+
+            # filter out configs based on configs_select and configs_ignore
             if len(args.configs_select) > 0:
                 cfg_names = list_intersection(cfg_names, args.configs_select)
             elif len(args.configs_ignore) > 0:
                 cfg_names = list_difference(cfg_names, args.configs_ignore)
-                
+
             print(f"Processing configurations: {cfg_names}")
-            
+
             if args.task in [GENERATE_PACKAGES_TASK_NAME, DOWNLOAD_PACKAGES_TASK_NAME, PROCESS_CACHED_TASK_NAME]:
-                #these options use the process parser
+                # these options use the process parser
                 if args.task == GENERATE_PACKAGES_TASK_NAME:
                     generate_packages(model_names, cfg_names)
-                    
+
                     if not args.no_archive:
                         archive_packages(os.path.abspath(args.archives_dir))
-                
+
                 elif args.task == DOWNLOAD_PACKAGES_TASK_NAME:
-                    #determine url to download from
+                    # determine url to download from
                     if args.from_url != DEFAULT_DOWNLOAD_LATEST_URL and args.from_release != "latest":
-                        #both --from-url and --from-release were specified. This is a no-no
-                        print("--from-url and --from-release cannot both be specified.")
+                        # both --from-url and --from-release were specified. This is a no-no
+                        print(
+                            "--from-url and --from-release cannot both be specified.")
                         exit(1)
-                    
+
                     download_url = args.from_url
                     if args.from_release != "latest":
-                        download_url = os.path.join(DEFAULT_DOWNLOAD_VERSION_URL, args.from_release)
-                    
+                        download_url = os.path.join(
+                            DEFAULT_DOWNLOAD_VERSION_URL, args.from_release)
+
                     download_packages(
                         download_url,
-                        args.local_config, 
+                        args.local_config,
                         args.deploy_config,
                         model_names,
                         cfg_names,
                         args.assume_yes)
-                
+
                 if not args.no_process_local:
                     handle_local_packages(
                         args.local_config,
                         os.path.abspath(args.local_dir),
                         args.build)
-                
+
                 if not args.no_process_deploy:
                     handle_deploy_packages(
                         args.deploy_config,
