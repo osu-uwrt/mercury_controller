@@ -52,7 +52,7 @@ target_link_libraries(controller_overseer
   ${YAML_CPP_LIBRARIES})
 
 
-install(TARGETS thruster_test_canbus
+install(TARGETS thruster_test_canbus controller_overseer
   DESTINATION lib/${PROJECT_NAME})
 
 # yoink python programs from python source

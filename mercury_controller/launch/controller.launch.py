@@ -1,0 +1,72 @@
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction, OpaqueFunction
+from launch_ros.actions import PushRosNamespace, Node
+from launch.substitutions import LaunchConfiguration
+
+import os
+
+
+def get_complete_launch(launch_prefix):
+    return Node(
+        prefix=[launch_prefix],
+        package="complete_controller",
+        executable="complete_controller",
+        name="complete_controller",
+        output="screen"
+    )
+
+
+def get_launch_prefix():
+    # detect if we are running on the orin
+    launch_prefix = ""
+    if (os.path.exists("/home/ros/colcon_deploy")):
+        print("I'm running on the orin! Isolating a core for controller use!")
+        launch_prefix = "taskset -c 11"
+    else:
+        print("I'm running on a development laptop")
+
+    return launch_prefix
+
+
+def launch_active_control(context, *args, **kwargs):
+    active_control_enabled = LaunchConfiguration(
+        "active_control_enabled").perform(context)
+
+    if active_control_enabled == "True":
+        return [get_complete_launch(get_launch_prefix())]
+
+    print("-----------------------------------------------------------------")
+    print("Active control model either unknown or disabled. Not launching.")
+    print("-----------------------------------------------------------------")
+    return []
+
+
+def generate_launch_description():
+    launch_prefix = get_launch_prefix()
+
+    return LaunchDescription([
+        DeclareLaunchArgument(name="robot", default_value="mercury",
+                              description="name of the robot to run"),
+
+        DeclareLaunchArgument(name="active_control_enabled", default_value="True",
+                              description="Whether or not the active control model should be launched"),
+
+        GroupAction([
+            PushRosNamespace(LaunchConfiguration("robot")),
+
+            Node(
+                prefix=[launch_prefix],
+                package="mercury_controller",
+                executable="controller_overseer",
+                name="controller_overseer",
+                parameters=[
+                    {
+                        "robot": LaunchConfiguration("robot"),
+                    }
+                ],
+                output="screen"
+            ),
+
+            OpaqueFunction(function=launch_active_control)
+        ], scoped=True)
+    ])
