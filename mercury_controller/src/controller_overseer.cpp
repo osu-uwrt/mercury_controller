@@ -200,12 +200,12 @@
         string autoFFSubpath = "config/" + robotName + "_autoff.yaml";
 
         //check if running on orin or not, set autoffConfig accordingly
-        if(fs::exists("/home/ros/colcon_deploy")){
+        if(!fs::exists("/home/ros/colcon_deploy")){
             RCLCPP_INFO(get_logger(), "I think I am NOT running on the orin!");
             autoffConfigPath = controlShareDir + autoFFSubpath;
         }else{
             RCLCPP_INFO(get_logger(), "I think I am running on the orin!");
-            autoffConfigPath = "/bin" + robotName + "_autoff.yaml";     //this will need to change it is no longer /bin
+            autoffConfigPath = "/bin/" + robotName + "_autoff.yaml";     //this will need to change it is no longer /bin
         }
     }
 
