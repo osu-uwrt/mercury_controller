@@ -96,7 +96,7 @@
                 for(const auto& item : tree){
                     if(item.IsScalar()){
                         try{
-                            int64_t changed = item.as<int64_t>()*PARAMETERSCALE;
+                            int64_t changed = item.as<double>()*PARAMETERSCALE;
                             array.push_back(changed);
                         }catch (const YAML::BadConversion& e){
                             RCLCPP_ERROR(get_logger(), "%s not read properly", path.c_str());
@@ -114,7 +114,7 @@
                 int64_t num = 0;
                 bool boolean;
                 try{
-                    num = tree.as<int64_t>() * PARAMETERSCALE;
+                    num = tree.as<double>() * PARAMETERSCALE;
                 } catch (const YAML::BadConversion& e){
                     try{
                     boolean = tree.as<bool>();
@@ -153,6 +153,7 @@
             
             configPath = descriptionsShareDir + "/" + robotConfigSubpath;
             
+            RCLCPP_INFO(get_logger(), "Config Path: %s", configPath.c_str());
             //split the path into all subpaths
             std::vector<string> dirSplit;
             std::stringstream ss(configPath);
@@ -189,6 +190,8 @@
                 for(const string& path : possiblePaths){
                     if(fs::exists(path)){
                         configPath = path;
+                        RCLCPP_INFO(get_logger(), "NEW Config Path: %s", configPath.c_str());
+
                         RCLCPP_INFO(get_logger(), "Discovered source directory, overriding descriptions to use %s", configPath.c_str());
                     }
                 }
@@ -197,7 +200,7 @@
 
         //find autoff config
         string controlShareDir = ament_index_cpp::get_package_share_directory("mercury_controller");
-        string autoFFSubpath = "config/" + robotName + "_autoff.yaml";
+        string autoFFSubpath = "/config/" + robotName + "_autoff.yaml";
 
         //check if running on orin or not, set autoffConfig accordingly
         if(!fs::exists("/home/ros/colcon_deploy")){
@@ -224,9 +227,9 @@
             com = configTree["com"].as<std::vector<double>>();
 
             //set base wrench and add all parameters from yaml file into completeController
-            baseWrench = getYamlNodeAs<std::vector<double>>(controllerTree, {"feed_forward", "base_wrench"});
+            baseWrench = getYamlNodeAs<std::vector<double>>(controllerTree, {"controller", "feed_forward", "base_wrench"});
             traversal(completeController->intV, completeController->boolV, completeController->arrayV, configTree, "");
-            traversal(completeController->intV, completeController->boolV, completeController->arrayV, controllerTree, "controller__");
+            traversal(completeController->intV, completeController->boolV, completeController->arrayV, controllerTree, "");
 
             //save thruster solver information
             auto thrusterSolverInfo = controllerTree["thruster_solver"];
