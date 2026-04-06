@@ -397,7 +397,7 @@
         try{
             for(int i = 0; i < 8; i++){
                 //if thruster above water, set submerged to true
-                pos = tfBuffer->lookupTransform("world", tfNamespace + "thruster_" + std::to_string(i), tf2::TimePointZero);
+                pos = tfBuffer->lookupTransform("world", tfNamespace + "/thruster_" + std::to_string(i), tf2::TimePointZero);
                 if(pos.transform.translation.z < killPlane){
                     submerged[i] = true;
                 }
