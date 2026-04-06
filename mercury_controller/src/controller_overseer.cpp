@@ -31,7 +31,7 @@
 
     //Pulishers, Subscribers, Services
         //thruster info
-        thrusterTelemetry = create_subscription<mercury_msgs::msg::DshotPartialTelemetry>("/state/thrusters/telemetry", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::thrusterTelemetryCB, this, _1));        
+        thrusterTelemetry = create_subscription<mercury_msgs::msg::DshotPartialTelemetry>("state/thrusters/telemetry", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::thrusterTelemetryCB, this, _1));        
         setThrusterSolverParams = create_client<rcl_interfaces::srv::SetParameters>(thrusterSolverName + "/set_parameters");
         thrusterModeSub = create_subscription<std_msgs::msg::Int16>("thrusterSolver/thrusterState", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::setThrusterModeCB, this, _1));
         odom = create_subscription<nav_msgs::msg::Odometry>("odometry/filtered", rclcpp::SystemDefaultsQoS(), std::bind(&ControllerOverseer::odometryCB, this, _1));
@@ -257,37 +257,86 @@
     }
 
     void ControllerOverseer::generateThrusterForceMatrix(){
-        std::vector<int64_t> thrusterFT;
-        int i = 0;
-        //set thruster force torque vector as (Fx, Fy, Fz, Tx, Ty, Tz)
-        for(const auto& thruster : thrusterInfo){
-            std::vector<double> thrusterPose = getYamlNodeAs<std::vector<double>>(thruster, {"pose"});
-            //make 3d matrix of each axis angled
-            m3d R = 
-                    Eigen::AngleAxisd(thrusterPose[5],   Eigen::Vector3d::UnitZ()).toRotationMatrix() *
-                    Eigen::AngleAxisd(thrusterPose[4], Eigen::Vector3d::UnitY()).toRotationMatrix() *
-                    Eigen::AngleAxisd(thrusterPose[3],  Eigen::Vector3d::UnitX()).toRotationMatrix();
+        std::vector<int64_t> thrusterFT = {
+            -707099,
+            -500008,
+            -500001,
+            171600,
+            11969,
+            -254646,
+            -707099,
+            500008,
+            -500001,
+            -65645,
+            11969,
+            104805,
+            707106,
+            -499999,
+            -500001,
+            171599,
+            -42527,
+            285204,
+            707106,
+            499999,
+            -500001,
+            -65645,
+            -42527,
+            -135362,
+            -707099,
+            -500008,
+            500001,
+            -150918,
+            -41217,
+            -254646,
+            -707099,
+            500008,
+            500001,
+            44963,
+            -41217,
+            104805,
+            707106,
+            -499999,
+            500001,
+            -150918,
+            71775,
+            285204,
+            707106,
+            499999,
+            500001,
+            44963,
+            71775,
+            -135362
+        };
+        // int i = 0;
+        // //set thruster force torque vector as (Fx, Fy, Fz, Tx, Ty, Tz)
+        // for(const auto& thruster : thrusterInfo){
+        //     std::vector<double> thrusterPose = getYamlNodeAs<std::vector<double>>(thruster, {"pose"});
+        //     //make 3d matrix of each axis angled
+        //     m3d R = 
+        //             Eigen::AngleAxisd(thrusterPose[5],   Eigen::Vector3d::UnitZ()).toRotationMatrix() *
+        //             Eigen::AngleAxisd(thrusterPose[4], Eigen::Vector3d::UnitY()).toRotationMatrix() *
+        //             Eigen::AngleAxisd(thrusterPose[3],  Eigen::Vector3d::UnitX()).toRotationMatrix();
 
-            //force vector is just that matrix left multiplied by the x direction
-            v3d forceVector = R * Eigen::Vector3d::UnitX(); 
+        //     //force vector is just that matrix left multiplied by the x direction
+        //     v3d forceVector = R * Eigen::Vector3d::UnitX(); 
 
-            std::vector<double> positionFromCom;
-            for(int j = 0; j<3; j++){
-                positionFromCom.push_back(thrusterPose[j] - com[j]);
-            }
+        //     std::vector<double> positionFromCom;
+        //     for(int j = 0; j<3; j++){
+        //         positionFromCom.push_back(thrusterPose[j] - com[j]);
+        //     }
             
-            //torque = momentArm x forceVector (cross multiply)
-            v3d momentArm(positionFromCom[0], positionFromCom[1], positionFromCom[2]);
-            v3d torque = momentArm.cross(forceVector);
+        //     //torque = momentArm x forceVector (cross multiply)
+        //     v3d momentArm(positionFromCom[0], positionFromCom[1], positionFromCom[2]);
+        //     v3d torque = momentArm.cross(forceVector);
                 
-            //multiply all by parameter scale so they can be set as parameters
-            thrusterFT.push_back(static_cast<int64_t>(forceVector(0) * PARAMETERSCALE));
-            thrusterFT.push_back(static_cast<int64_t>(forceVector(1) * PARAMETERSCALE));
-            thrusterFT.push_back(static_cast<int64_t>(forceVector(2) * PARAMETERSCALE));
-            thrusterFT.push_back(static_cast<int64_t>(torque(0) * PARAMETERSCALE));
-            thrusterFT.push_back(static_cast<int64_t>(torque(1) * PARAMETERSCALE));
-            thrusterFT.push_back(static_cast<int64_t>(torque(2) * PARAMETERSCALE));
-        }
+        //     //multiply all by parameter scale so they can be set as parameters
+        //     thrusterFT.push_back(static_cast<int64_t>(forceVector(0) * PARAMETERSCALE));
+        //     thrusterFT.push_back(static_cast<int64_t>(forceVector(1) * PARAMETERSCALE));
+        //     thrusterFT.push_back(static_cast<int64_t>(forceVector(2) * PARAMETERSCALE));
+        //     thrusterFT.push_back(static_cast<int64_t>(torque(0) * PARAMETERSCALE));
+        //     thrusterFT.push_back(static_cast<int64_t>(torque(1) * PARAMETERSCALE));
+        //     thrusterFT.push_back(static_cast<int64_t>(torque(2) * PARAMETERSCALE));
+        // }
 
         completeController->arrayV.emplace_back(robotName + "_wrenchmat", thrusterFT);
     }
@@ -358,6 +407,8 @@
         }
 
         motionEnabledPub->publish(motionMsg);
+        
+        RCLCPP_INFO(get_logger(), "Setting motion_enabled to %d first", motionMsg.data);
 
     }
 
@@ -373,6 +424,8 @@
         motionMsg.data = false;
         enabled = false;
         motionEnabledPub->publish(motionMsg);
+
+        RCLCPP_INFO(get_logger(), "Setting motion_enabled to %d second", motionMsg.data);
     }
 
     void ControllerOverseer::setThrusterModeCB(std_msgs::msg::Int16::SharedPtr msg){
@@ -463,7 +516,7 @@
         std_msgs::msg::Int32MultiArray msg;
         std::vector<int> weights;
         for(const double& weight : thrusterWeights){
-            weights.push_back(weight);
+            weights.push_back(1);
         }
         msg.data = weights;
         weightsPub->publish(msg);
@@ -474,7 +527,7 @@
             //set control mask based off yaml
             ParameterValue pVal;
             pVal.type = ParameterType::PARAMETER_INTEGER_ARRAY;
-            pVal.integer_array_value = getYamlNodeAs<std::vector<int64_t>>(controllerTree, {"controller", "active_force_control"});
+            pVal.integer_array_value = getYamlNodeAs<std::vector<int64_t>>(controllerTree, {"controller", "active_force_mask"});
 
             if(req->data){
                 //set teleop
