@@ -21,7 +21,7 @@ def get_launch_prefix():
     launch_prefix = ""
     if (os.path.exists("/home/ros/colcon_deploy")):
         print("I'm running on the orin! Isolating a core for controller use!")
-        launch_prefix = "taskset -c 11"
+        launch_prefix = "taskset -c 5"
     else:
         print("I'm running on a development laptop")
 
