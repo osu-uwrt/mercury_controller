@@ -79,7 +79,7 @@ class MonitoredServiceClient{
             if(waitingRequests.size() > 0){
                 activeClient = waitingRequests.back();
                 waitingRequests.pop_back();
-                RCLCPP_INFO(node->get_logger(), "Making call to %s", client->get_service_name());
+                // RCLCPP_INFO(node->get_logger(), "Making call to %s", client->get_service_name());
                 client->wait_for_service();
                 activeFuture = client->async_send_request(activeClient.request, std::bind(
                                                                                     &MonitoredServiceClient<ServiceT>::serviceCallback,

@@ -172,7 +172,7 @@
 
         //if all were successful, inform
         if(success){
-            RCLCPP_INFO(overseer->get_logger(), "Successfully set parameters for %s", nodeName.c_str());
+            // RCLCPP_INFO(overseer->get_logger(), "Successfully set parameters for %s", nodeName.c_str());
         }
 
         paramsLoaded = true;
