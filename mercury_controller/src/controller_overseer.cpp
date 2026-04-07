@@ -516,7 +516,7 @@
         std_msgs::msg::Int32MultiArray msg;
         std::vector<int> weights;
         for(const double& weight : thrusterWeights){
-            weights.push_back(1);
+            weights.push_back(weight);
         }
         msg.data = weights;
         weightsPub->publish(msg);

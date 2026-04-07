@@ -156,8 +156,8 @@ class ControllerOverseer : public rclcpp::Node {
     //position of center of mass
     std::vector<double> com;
 
-    //thruster mode, 0: normal, 1: low downdraft
-    int thrusterMode = 0;
+    //thruster mode, 1: normal, 2: low downdraft
+    int thrusterMode = 1;
 
     //path to config yaml files
     string autoffConfigPath = "";
