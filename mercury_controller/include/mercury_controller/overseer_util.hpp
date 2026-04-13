@@ -1,7 +1,7 @@
 #pragma once
 
 #include <yaml-cpp/yaml.h>
-#include "Eigen/Dense"
+#include <eigen3/Eigen/Dense>
 
 using v3d = Eigen::Vector3d;
   

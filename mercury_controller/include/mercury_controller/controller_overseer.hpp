@@ -38,7 +38,7 @@
 #include <exception>
 #include <chrono>
 
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
 
 #include "simulink_model.hpp"
 #include "overseer_util.hpp"

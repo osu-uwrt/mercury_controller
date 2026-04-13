@@ -257,87 +257,42 @@
     }
 
     void ControllerOverseer::generateThrusterForceMatrix(){
-        std::vector<int64_t> thrusterFT = {
-            -707099,
-            -500008,
-            -500001,
-            171600,
-            11969,
-            -254646,
-            -707099,
-            500008,
-            -500001,
-            -65645,
-            11969,
-            104805,
-            707106,
-            -499999,
-            -500001,
-            171599,
-            -42527,
-            285204,
-            707106,
-            499999,
-            -500001,
-            -65645,
-            -42527,
-            -135362,
-            -707099,
-            -500008,
-            500001,
-            -150918,
-            -41217,
-            -254646,
-            -707099,
-            500008,
-            500001,
-            44963,
-            -41217,
-            104805,
-            707106,
-            -499999,
-            500001,
-            -150918,
-            71775,
-            285204,
-            707106,
-            499999,
-            500001,
-            44963,
-            71775,
-            -135362
-        };
-        // int i = 0;
-        // //set thruster force torque vector as (Fx, Fy, Fz, Tx, Ty, Tz)
-        // for(const auto& thruster : thrusterInfo){
-        //     std::vector<double> thrusterPose = getYamlNodeAs<std::vector<double>>(thruster, {"pose"});
-        //     //make 3d matrix of each axis angled
-        //     m3d R = 
-        //             Eigen::AngleAxisd(thrusterPose[5],   Eigen::Vector3d::UnitZ()).toRotationMatrix() *
-        //             Eigen::AngleAxisd(thrusterPose[4], Eigen::Vector3d::UnitY()).toRotationMatrix() *
-        //             Eigen::AngleAxisd(thrusterPose[3],  Eigen::Vector3d::UnitX()).toRotationMatrix();
+        std::vector<int64_t> thrusterFT; 
 
-        //     //force vector is just that matrix left multiplied by the x direction
-        //     v3d forceVector = R * Eigen::Vector3d::UnitX(); 
+        //set thruster force torque vector as (Fx, Fy, Fz, Tx, Ty, Tz)
+        for(const auto& thruster : thrusterInfo){
+            std::vector<double> thrusterPose = getYamlNodeAs<std::vector<double>>(thruster, {"pose"});
+            //make 3d matrix of each axis angled
+            m3d R = 
+                    Eigen::AngleAxisd(thrusterPose[5],   Eigen::Vector3d::UnitZ()).toRotationMatrix() *
+                    Eigen::AngleAxisd(thrusterPose[4], Eigen::Vector3d::UnitY()).toRotationMatrix() *
+                    Eigen::AngleAxisd(thrusterPose[3],  Eigen::Vector3d::UnitX()).toRotationMatrix();
 
-        //     std::vector<double> positionFromCom;
-        //     for(int j = 0; j<3; j++){
-        //         positionFromCom.push_back(thrusterPose[j] - com[j]);
-        //     }
+            //force vector is just that matrix left multiplied by the x direction
+            v3d forceVector = R * Eigen::Vector3d::UnitX(); 
+
+            std::vector<double> positionFromCom;
+            for(int j = 0; j<3; j++){
+                positionFromCom.push_back(thrusterPose[j] - com[j]);
+            }
             
-        //     //torque = momentArm x forceVector (cross multiply)
-        //     v3d momentArm(positionFromCom[0], positionFromCom[1], positionFromCom[2]);
-        //     v3d torque = momentArm.cross(forceVector);
+            //torque = momentArm x forceVector (cross multiply)
+            v3d momentArm(positionFromCom[0], positionFromCom[1], positionFromCom[2]);
+            v3d torque = momentArm.cross(forceVector);
                 
-        //     //multiply all by parameter scale so they can be set as parameters
-        //     thrusterFT.push_back(static_cast<int64_t>(forceVector(0) * PARAMETERSCALE));
-        //     thrusterFT.push_back(static_cast<int64_t>(forceVector(1) * PARAMETERSCALE));
-        //     thrusterFT.push_back(static_cast<int64_t>(forceVector(2) * PARAMETERSCALE));
-        //     thrusterFT.push_back(static_cast<int64_t>(torque(0) * PARAMETERSCALE));
-        //     thrusterFT.push_back(static_cast<int64_t>(torque(1) * PARAMETERSCALE));
-        //     thrusterFT.push_back(static_cast<int64_t>(torque(2) * PARAMETERSCALE));
+            //multiply all by parameter scale so they can be set as parameters
+            thrusterFT.push_back(static_cast<int64_t>(forceVector(0) * PARAMETERSCALE));
+            thrusterFT.push_back(static_cast<int64_t>(forceVector(1) * PARAMETERSCALE));
+            thrusterFT.push_back(static_cast<int64_t>(forceVector(2) * PARAMETERSCALE));
+            thrusterFT.push_back(static_cast<int64_t>(torque(0) * PARAMETERSCALE));
+            thrusterFT.push_back(static_cast<int64_t>(torque(1) * PARAMETERSCALE));
+            thrusterFT.push_back(static_cast<int64_t>(torque(2) * PARAMETERSCALE));
+        }
+        
+        // for(int i = 0; i<6*8; i++){
+        //     RCLCPP_INFO(get_logger(), "%ld", thrusterFT[i]);
         // }
-
+        
         completeController->arrayV.emplace_back(robotName + "_wrenchmat", thrusterFT);
     }
 
@@ -491,7 +446,7 @@
         //if underactuated, disable robot
         if(activeThrusterCount <= 6){
             if(enabled){
-                RCLCPP_ERROR(get_logger(), "System is underactuated. Only: %s thrusters are active. Killing thrusters!", std::to_string(activeThrusterCount).c_str());
+                RCLCPP_ERROR(get_logger(), "System is underactuated. Only: %d thrusters are active. Killing thrusters!", activeThrusterCount);
                 enabled = false;
             }else{
                 enabled = true;

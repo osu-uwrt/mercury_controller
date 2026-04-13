@@ -183,8 +183,13 @@
     //tell overseer to reload from config file
     bool SimulinkModelClass::reloadParams(){
         knownParams.clear();
-        overseer->readConfig();
+        intV.clear();
+        arrayV.clear();
+        boolV.clear();
 
+        overseer->readConfig();
+        overseer->generateThrusterForceMatrix();
+        
         return listAndSetModelParameters();
     }
 
