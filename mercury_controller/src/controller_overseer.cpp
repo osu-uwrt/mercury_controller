@@ -202,12 +202,12 @@
         string controlShareDir = ament_index_cpp::get_package_share_directory("mercury_controller");
         string autoFFSubpath = "/config/" + robotName + "_autoff.yaml";
 
-        //check if running on orin or not, set autoffConfig accordingly
+        //check if running on nano or not, set autoffConfig accordingly
         if(!fs::exists("/home/ros/colcon_deploy")){
-            RCLCPP_INFO(get_logger(), "I think I am NOT running on the orin!");
+            RCLCPP_INFO(get_logger(), "I think I am NOT running on the nano!");
             autoffConfigPath = controlShareDir + autoFFSubpath;
         }else{
-            RCLCPP_INFO(get_logger(), "I think I am running on the orin!");
+            RCLCPP_INFO(get_logger(), "I think I am running on the nano!");
             autoffConfigPath = "/bin/" + robotName + "_autoff.yaml";     //this will need to change it is no longer /bin
         }
     }
@@ -322,6 +322,7 @@
             //if a thruster is down, add to power stops
             if(msg->disabled_flags != 0){
                 escPowerStopsLow++;
+                RCLCPP_WARN(get_logger(), "Not all thrusters working: %d down", msg->disabled_flags);
             }else{
                 escPowerStopsLow = 0;
             }
@@ -342,6 +343,7 @@
             //if a thruster is down, add to power stops
             if(msg->disabled_flags != 0){
                 escPowerStopsHigh++;
+                RCLCPP_WARN(get_logger(), "Not all thrusters working: %d down", msg->disabled_flags);
             }else{
                 escPowerStopsHigh = 0;
             }
@@ -560,6 +562,7 @@
             msg.angular.z = 0.0;
 
             ffPub->publish(msg);
+            RCLCPP_INFO(get_logger(), "Feed forward disabled");
         }
     }
 
