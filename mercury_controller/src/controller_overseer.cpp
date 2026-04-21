@@ -322,7 +322,7 @@
             //if a thruster is down, add to power stops
             if(msg->disabled_flags != 0){
                 escPowerStopsLow++;
-                RCLCPP_WARN(get_logger(), "Not all thrusters working: %d down", msg->disabled_flags);
+                RCLCPP_WARN(get_logger(), "Recieving disabled flag: %d", msg->disabled_flags);
             }else{
                 escPowerStopsLow = 0;
             }
@@ -343,7 +343,7 @@
             //if a thruster is down, add to power stops
             if(msg->disabled_flags != 0){
                 escPowerStopsHigh++;
-                RCLCPP_WARN(get_logger(), "Not all thrusters working: %d down", msg->disabled_flags);
+                RCLCPP_WARN(get_logger(), "Recieving disabled flag: %d", msg->disabled_flags);
             }else{
                 escPowerStopsHigh = 0;
             }
@@ -365,7 +365,7 @@
 
         motionEnabledPub->publish(motionMsg);
         
-        RCLCPP_INFO(get_logger(), "Setting motion_enabled to %d first", motionMsg.data);
+        //RCLCPP_INFO(get_logger(), "Setting motion_enabled to %d first", motionMsg.data);
 
     }
 
