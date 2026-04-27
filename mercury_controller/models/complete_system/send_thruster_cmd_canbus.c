@@ -171,6 +171,15 @@ void stop_handler () {
     _exit(0);
 }
 
+int send_cmd_for_s(int16_t cmd[8], uint16_t s) {
+    for (int j = 0; j < 100; j++) {
+        if (send_thruster_cmd_canbus(cmd)) return 1;
+        usleep(s * 10 * 1000); //100 * 30000 = 3000000us = 3s
+    }
+
+    return 0;
+}
+
 #include <signal.h>
 
 int main(void) {
@@ -183,10 +192,14 @@ int main(void) {
         for (int i = 0; i < 8; i++) {
             printf("Testing Thruster %d...\n", i);
             cmd[i] = 300;
-            for (int j = 0; j < 100; j++) {
-                if (send_thruster_cmd_canbus(cmd)) return 1;
-                usleep(30 * 1000); //100 * 30000 = 3000000us = 3s
-            }
+            if (send_cmd_for_s(cmd, 3)) 
+                return 1;
+            cmd[i] = 0;
+            if (send_cmd_for_s(cmd, 1)) 
+                return 1;
+            cmd[i] = -300;
+            if (send_cmd_for_s(cmd, 3)) 
+                return 1;
             cmd[i] = 0;
         }
     }
