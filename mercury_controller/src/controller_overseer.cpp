@@ -547,7 +547,7 @@
             msg.angular.y = baseWrench[4];
             msg.angular.z = baseWrench[5];
 
-            ffPub->publish(msg);
+            // ffPub->publish(msg);
         
         //reset if needed
         }else if(publishingFF){
@@ -561,7 +561,7 @@
             msg.angular.y = 0.0;
             msg.angular.z = 0.0;
 
-            ffPub->publish(msg);
+            // ffPub->publish(msg);
             RCLCPP_INFO(get_logger(), "Feed forward disabled");
         }
     }
