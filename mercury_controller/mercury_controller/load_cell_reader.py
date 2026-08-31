@@ -7,6 +7,7 @@ from std_msgs.msg import Float32
 from rclpy.node import Node
 from rclpy.qos import qos_profile_system_default
 
+
 def main(args=None):
     rclpy.init(args=args)
     node = Node('thruster_force_gauge_publisher')
@@ -15,7 +16,7 @@ def main(args=None):
         Float32, "force_gauge/force", qos_profile_system_default)
 
     openedPort = False
-    while(openedPort == False):
+    while (openedPort == False):
         try:
             ser = serial.Serial(node.get_parameter("port").value, 115200)
             openedPort = True
@@ -29,7 +30,7 @@ def main(args=None):
     tare = 0
     weight = 0
     badReadings = 0
-    while(time.time() < start + 5):
+    while (time.time() < start + 5):
         if ser.in_waiting:
 
             try:
@@ -42,13 +43,14 @@ def main(args=None):
                     weight = 1
 
                 else:
-                    tare = tare * ((weight) / (weight + 1)) + new / (weight + 1)
+                    tare = tare * ((weight) / (weight + 1)) + \
+                        new / (weight + 1)
             except:
                 badReadings += 1
 
-    if(badReadings > 5):
+    if (badReadings > 5):
         node.get_logger().warn("Signifcat Number of Bad Readings in Tare: " + str(badReadings))
-    
+
     while True:
         if ser.in_waiting:
             msg = Float32()

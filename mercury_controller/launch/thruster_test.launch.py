@@ -12,7 +12,7 @@ def generate_launch_description():
 
     # Read in the vehicle's namespace through the command line or use the default value one is not provided
     robot = LaunchConfiguration("robot")
-    
+
     # declare the path to the robot's vehicle description file
     config = PathJoinSubstitution([
         get_package_share_directory('riptide_descriptions2'),

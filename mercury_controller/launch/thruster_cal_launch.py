@@ -44,7 +44,7 @@ def generate_launch_description():
                     {"robot": robot},
                 ]
             ),
-            
+
             launch_ros.actions.Node(
                 package="riptide_controllers2",
                 executable="load_cell_reader.py",

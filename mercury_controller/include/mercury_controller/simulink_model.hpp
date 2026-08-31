@@ -1,22 +1,17 @@
 #pragma once
 
-#include <rclcpp/rclcpp.hpp>
-
+#include <memory>
+#include <rcl_interfaces/msg/parameter.hpp>
+#include <rcl_interfaces/msg/parameter_type.hpp>
+#include <rcl_interfaces/msg/parameter_value.hpp>
 #include <rcl_interfaces/srv/list_parameters.hpp>
 #include <rcl_interfaces/srv/set_parameters.hpp>
-#include <rcl_interfaces/msg/parameter.hpp>
-#include <rcl_interfaces/msg/parameter_value.hpp>
-#include <rcl_interfaces/msg/parameter_type.hpp>
-
+#include <rclcpp/rclcpp.hpp>
 #include <std_srvs/srv/trigger.hpp>
-
-
-#include <memory>
 #include <string>
 #include <unordered_set>
 #include <utility>
 #include <vector>
-
 
 #include "monitored_service_client.hpp"
 
@@ -31,60 +26,52 @@ using Parameter = rcl_interfaces::msg::Parameter;
 using ParameterType = rclcpp::ParameterType;
 using ParameterValue = rcl_interfaces::msg::ParameterValue;
 
-
 #define RELOAD_TIME 2
 
-class SimulinkModelClass{
-
-    public:
-
+class SimulinkModelClass {
+public:
     bool modelActive;
     string fullNodeName;
-    
-    //overseer node and node name
+
+    // overseer node and node name
     std::shared_ptr<ControllerOverseer> overseer;
     string nodeName;
 
-    //set of known parameters
+    // set of known parameters
     std::unordered_set<string> knownParams;
 
-    //reload parameter service and ROS Time of last reload time
+    // reload parameter service and ROS Time of last reload time
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reloadParamService;
     rclcpp::Time lastReloadTime;
 
-    //have params been loaded
+    // have params been loaded
     bool paramsLoaded;
 
-
-
-    //list and set param client
+    // list and set param client
     std::shared_ptr<MonitoredServiceClient<ListParams>> listParamClient;
     std::shared_ptr<MonitoredServiceClient<SetParams>> setParamClient;
 
-    
-    std::vector<std::pair<std::string,int64_t>> intV;
-    std::vector<std::pair<std::string,bool>> boolV;
-    std::vector<std::pair<std::string,std::vector<int64_t>>> arrayV;
+    std::vector<std::pair<std::string, int64_t>> intV;
+    std::vector<std::pair<std::string, bool>> boolV;
+    std::vector<std::pair<std::string, std::vector<int64_t>>> arrayV;
 
-    //constructor
+    // constructor
     SimulinkModelClass(std::shared_ptr<ControllerOverseer> overseerNode, string name);
 
     /*
         Checks if model is active, handles when model comes up or down.
     */
-    void checkIfActive(const std::vector<string>& activeNodes);
+    void checkIfActive(const std::vector<string> & activeNodes);
 
     /*
-        returns true is the parameters are successfully set and listed 
+        returns true is the parameters are successfully set and listed
      */
     bool listAndSetModelParameters();
-
 
     /*
         Callback that does the setting of the parameters for the listAndSetModelParameters function
     */
     void setModelParametersFromListCallback(ListParams::Response::SharedPtr response);
-
 
     /*
         Sets the models parameters from a vector of strings
@@ -94,8 +81,8 @@ class SimulinkModelClass{
     /*
         Callback for when the set parameters client is called
     */
-    void setParametersDoneCallback(SetParams::Response::SharedPtr res, SetParams::Request::SharedPtr req);
-
+    void setParametersDoneCallback(
+        SetParams::Response::SharedPtr res, SetParams::Request::SharedPtr req);
 
     /*
         reloads the parameters from the .yaml file
@@ -105,9 +92,7 @@ class SimulinkModelClass{
     /*
         Callback that makes the response for the triggered client for reloading the parameters
     */
-    void reloadParametersCallback(const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
-                                                                std::shared_ptr<std_srvs::srv::Trigger::Response> res);
-
-
-
+    void reloadParametersCallback(
+        const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> res);
 };

@@ -17,12 +17,13 @@ import yaml
 
 import time
 
-#the factor to publish the thruster test at 
+# the factor to publish the thruster test at
 THRUSTER_NEUTRAL_FORCE = 0.0
 THRUSTER_TEST_FORCE = 1.3333
 
 DSHOT_NEUTRAL_VALUE = 0
 DSHOT_TEST_FACTOR = 0.05
+
 
 class ThrusterTestActionServer(Node):
     THRUSTER_PERCENT = 0.05
@@ -31,16 +32,19 @@ class ThrusterTestActionServer(Node):
         super().__init__('thruster_test')
         self.declare_parameter("vehicle_config", rclpy.Parameter.Type.STRING)
 
-        self.Dshot_pub = self.create_publisher(DshotCommand ,"command/dshot", qos_profile_sensor_data)
-        self.thruster_forces_pub = self.create_publisher(Float32MultiArray ,"thruster_forces", qos_profile_system_default)
-        self.dshot_mode_pub = self.create_publisher(Bool, "dshot_tune/set_raw", qos_profile_system_default)
+        self.Dshot_pub = self.create_publisher(
+            DshotCommand, "command/dshot", qos_profile_sensor_data)
+        self.thruster_forces_pub = self.create_publisher(
+            Float32MultiArray, "thruster_forces", qos_profile_system_default)
+        self.dshot_mode_pub = self.create_publisher(
+            Bool, "dshot_tune/set_raw", qos_profile_system_default)
 
         # Get the mass and COM
         with open(self.get_parameter('vehicle_config').value, 'r') as stream:
             self.vehicle_file = yaml.safe_load(stream)
             self.num_thrusters = len(self.vehicle_file["thrusters"])
 
-        #get dshot max value
+        # get dshot max value
         self.Dshot_max = DshotCommand.DSHOT_MAX
         self.running = False
 
@@ -54,8 +58,8 @@ class ThrusterTestActionServer(Node):
             callback_group=ReentrantCallbackGroup())
 
     ##############################
-    # Protections 
-    
+    # Protections
+
     def destroy(self):
         self.destroy_node()
         self._action_server.destroy()
@@ -72,7 +76,7 @@ class ThrusterTestActionServer(Node):
         return CancelResponse.ACCEPT
 
     def publish_dshot(self, values):
-        #publish dshot values
+        # publish dshot values
         msg = DshotCommand()
         msg.values = values
         self.Dshot_pub.publish(msg)
@@ -81,7 +85,7 @@ class ThrusterTestActionServer(Node):
         msg = Float32MultiArray()
         msg.data = forces
         self.thruster_forces_pub.publish(msg)
-    
+
     def publish_dshot_mode(self, mode):
         msg = Bool()
         msg.data = mode
@@ -97,8 +101,10 @@ class ThrusterTestActionServer(Node):
             for i in range(self.num_thrusters):
                 if goal_handle.is_cancel_requested:
                     self.get_logger().info('Preempted ThrusterTest Action')
-                    self.publish_dshot([DSHOT_NEUTRAL_VALUE] * self.num_thrusters)
-                    self.publish_forces([THRUSTER_NEUTRAL_FORCE] * self.num_thrusters)
+                    self.publish_dshot([DSHOT_NEUTRAL_VALUE]
+                                       * self.num_thrusters)
+                    self.publish_forces(
+                        [THRUSTER_NEUTRAL_FORCE] * self.num_thrusters)
 
                     self.publish_dshot_mode(False)
                     self.running = False
@@ -108,7 +114,8 @@ class ThrusterTestActionServer(Node):
                 thruster_type = self.vehicle_file["thrusters"][i]["type"]
                 thruster_name = self.vehicle_file["thrusters"][i]["name"]
 
-                self.get_logger().info(f'Testing {thruster_name} Thruster ({i+1})')
+                self.get_logger().info(
+                    f'Testing {thruster_name} Thruster ({i+1})')
 
                 thruster_forces[i] = THRUSTER_TEST_FORCE
                 if thruster_type == 0:
@@ -120,16 +127,17 @@ class ThrusterTestActionServer(Node):
                     self.publish_dshot(Dshot)
                     self.publish_forces(thruster_forces)
                     time.sleep(0.01)
-                
+
                 Dshot[i] = DSHOT_NEUTRAL_VALUE
                 thruster_forces[i] = THRUSTER_NEUTRAL_FORCE
 
-        #should never reach this point in the code
+        # should never reach this point in the code
         self.get_logger().info("ThrustTest succeeded")
         self.publish_dshot_mode(True)
         goal_handle.succeed()
         self.running = False
         return ThrusterTest.Result()
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -141,6 +149,7 @@ def main(args=None):
 
     thruster_test_action_server.destroy()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
