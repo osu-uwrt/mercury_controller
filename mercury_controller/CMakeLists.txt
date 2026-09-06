@@ -13,7 +13,6 @@ find_package(std_srvs REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(mercury_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
-find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -69,8 +68,8 @@ install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
 )
 
-#install 
-install(DIRECTORY config 
+#install
+install(DIRECTORY config
   DESTINATION share/${PROJECT_NAME}
 )
 
