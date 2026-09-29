@@ -1,0 +1,4 @@
+sources:
+  - include
+  - src
+  - mercury_controller
